@@ -2,14 +2,14 @@
 extern "C" _declspec(dllexport) unsigned int NvOptimusEnablement = 0x00000001;
 #endif
 
-#include <GL/glew.h>
-#include <cmath>
-#include <cstdlib>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstdlib>
+#include <GL/glew.h>
 
-#include <labhelper.h>
 #include <imgui.h>
+#include <labhelper.h>
 
 #include <perf.h>
 
@@ -21,9 +21,7 @@ using namespace glm;
 #include "hdr.h"
 #include "fbo.h"
 
-///////////////////////////////////////////////////////////////////////////////
 // Various globals
-///////////////////////////////////////////////////////////////////////////////
 SDL_Window* g_window = nullptr;
 float currentTime = 0.0f;
 float previousTime = 0.0f;
@@ -34,176 +32,55 @@ int windowWidth, windowHeight;
 ivec2 g_prevMouseCoords = { -1, -1 };
 bool g_isMouseDragging = false;
 
-///////////////////////////////////////////////////////////////////////////////
 // Shader programs
-///////////////////////////////////////////////////////////////////////////////
-GLuint shaderProgram;       // Shader for rendering the final image
-GLuint simpleShaderProgram; // Shader used to draw the shadow map
-GLuint backgroundProgram;
+GLuint raymarchingProgram;
 
-///////////////////////////////////////////////////////////////////////////////
-// Environment
-///////////////////////////////////////////////////////////////////////////////
-float environment_multiplier = 1.5f;
-GLuint environmentMap;
-const std::string envmap_base_name = "001";
-
-///////////////////////////////////////////////////////////////////////////////
-// Light source
-///////////////////////////////////////////////////////////////////////////////
-vec3 lightPosition;
-vec3 point_light_color = vec3(1.f, 1.f, 1.f);
-
-float point_light_intensity_multiplier = 10000.0f;
-
-///////////////////////////////////////////////////////////////////////////////
 // Camera parameters.
-///////////////////////////////////////////////////////////////////////////////
-vec3 cameraPosition(-70.0f, 50.0f, 70.0f);
+vec3 cameraPosition(0.0f, 0.0f, 0.0f);
 vec3 cameraDirection = normalize(vec3(0.0f) - cameraPosition);
 float cameraSpeed = 10.f;
 
 vec3 worldUp(0.0f, 1.0f, 0.0f);
 
-///////////////////////////////////////////////////////////////////////////////
-// Models
-///////////////////////////////////////////////////////////////////////////////
-labhelper::Model* fighterModel = nullptr;
-labhelper::Model* landingpadModel = nullptr;
-labhelper::Model* sphereModel = nullptr;
-
-mat4 roomModelMatrix;
-mat4 landingPadModelMatrix;
-mat4 fighterModelMatrix;
-
 void loadShaders(bool is_reload)
 {
-	GLuint shader = labhelper::loadShaderProgram("../project/simple.vert", "../project/simple.frag", is_reload);
+	GLuint shader = labhelper::loadShaderProgram("../project/background.vert", "../project/background.frag", is_reload);
 	if (shader != 0)
 	{
-		simpleShaderProgram = shader;
-	}
-
-	shader = labhelper::loadShaderProgram("../project/background.vert", "../project/background.frag", is_reload);
-	if (shader != 0)
-	{
-		backgroundProgram = shader;
-	}
-
-	shader = labhelper::loadShaderProgram("../project/shading.vert", "../project/shading.frag", is_reload);
-	if (shader != 0)
-	{
-		shaderProgram = shader;
+		raymarchingProgram = shader;
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////
-/// This function is called once at the start of the program and never again
-///////////////////////////////////////////////////////////////////////////////
+// This function is called once at the start of the program and never again
 void initialize()
 {
 	ENSURE_INITIALIZE_ONLY_ONCE();
 
-	///////////////////////////////////////////////////////////////////////
-	//		Load Shaders
-	///////////////////////////////////////////////////////////////////////
+	// Load Shaders
 	loadShaders(false);
-
-	///////////////////////////////////////////////////////////////////////
-	// Load models and set up model matrices
-	///////////////////////////////////////////////////////////////////////
-	fighterModel = labhelper::loadModelFromOBJ("../scenes/NewShip.obj");
-	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
-	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
-
-	roomModelMatrix = mat4(1.0f);
-	fighterModelMatrix = translate(15.0f * worldUp);
-	landingPadModelMatrix = mat4(1.0f);
-
-	///////////////////////////////////////////////////////////////////////
-	// Load environment map
-	///////////////////////////////////////////////////////////////////////
-	environmentMap = labhelper::loadHdrTexture("../scenes/envmaps/" + envmap_base_name + ".hdr");
-
-	glEnable(GL_DEPTH_TEST); // enable Z-buffering
-	glEnable(GL_CULL_FACE);  // enables backface culling
 }
 
-void debugDrawLight(const glm::mat4& viewMatrix,
-	const glm::mat4& projectionMatrix,
-	const glm::vec3& worldSpaceLightPos)
-{
-	mat4 modelMatrix = glm::translate(worldSpaceLightPos);
-	glUseProgram(shaderProgram);
-	labhelper::setUniformSlow(shaderProgram, "modelViewProjectionMatrix",
-		projectionMatrix * viewMatrix * modelMatrix);
-	labhelper::render(sphereModel);
-}
-
-void drawBackground(const mat4& viewMatrix, const mat4& projectionMatrix)
-{
-	glUseProgram(backgroundProgram);
-	labhelper::setUniformSlow(backgroundProgram, "environment_multiplier", environment_multiplier);
-	labhelper::setUniformSlow(backgroundProgram, "inv_PV", inverse(projectionMatrix * viewMatrix));
-	labhelper::setUniformSlow(backgroundProgram, "camera_pos", cameraPosition);
-	labhelper::drawFullScreenQuad();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-/// This function is used to draw the main objects on the scene
-///////////////////////////////////////////////////////////////////////////////
+// This function is used to draw the main objects on the scene
 void drawScene(GLuint currentShaderProgram,
 	const mat4& viewMatrix,
-	const mat4& projectionMatrix,
-	const mat4& lightViewMatrix,
-	const mat4& lightProjectionMatrix)
+	const mat4& projectionMatrix)
 {
 	glUseProgram(currentShaderProgram);
-	// Light source
-	vec4 viewSpaceLightPosition = viewMatrix * vec4(lightPosition, 1.0f);
-	labhelper::setUniformSlow(currentShaderProgram, "point_light_color", point_light_color);
-	labhelper::setUniformSlow(currentShaderProgram, "point_light_intensity_multiplier",
-		point_light_intensity_multiplier);
-	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightPosition", vec3(viewSpaceLightPosition));
-	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightDir",
-		normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
-
-	// Environment
-	labhelper::setUniformSlow(currentShaderProgram, "environment_multiplier", environment_multiplier);
 
 	// camera
 	labhelper::setUniformSlow(currentShaderProgram, "viewInverse", inverse(viewMatrix));
 
-	// landing pad
-	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
-		projectionMatrix * viewMatrix * landingPadModelMatrix);
-	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * landingPadModelMatrix);
-	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
-		inverse(transpose(viewMatrix * landingPadModelMatrix)));
-
-	labhelper::render(landingpadModel);
-
-	// Fighter
-	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
-		projectionMatrix * viewMatrix * fighterModelMatrix);
-	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * fighterModelMatrix);
-	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
-		inverse(transpose(viewMatrix * fighterModelMatrix)));
-
-	labhelper::render(fighterModel);
+	labhelper::drawFullScreenQuad();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-/// This function will be called once per frame, so the code to set up
-/// the scene for rendering should go here
-///////////////////////////////////////////////////////////////////////////////
+// This function will be called once per frame, so the code to set up
+// the scene for rendering should go here
 void display(void)
 {
 	labhelper::perf::Scope s("Display");
 
-	///////////////////////////////////////////////////////////////////////////
 	// Check if window size has changed and resize buffers as needed
-	///////////////////////////////////////////////////////////////////////////
+
 	{
 		int w, h;
 		SDL_GetWindowSize(g_window, &w, &h);
@@ -214,46 +91,22 @@ void display(void)
 		}
 	}
 
-	///////////////////////////////////////////////////////////////////////////
 	// setup matrices
-	///////////////////////////////////////////////////////////////////////////
 	mat4 projMatrix = perspective(radians(45.0f), float(windowWidth) / float(windowHeight), 5.0f, 2000.0f);
 	mat4 viewMatrix = lookAt(cameraPosition, cameraPosition + cameraDirection, worldUp);
 
-	vec4 lightStartPosition = vec4(40.0f, 40.0f, 0.0f, 1.0f);
-	lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
-	mat4 lightViewMatrix = lookAt(lightPosition, vec3(0.0f), worldUp);
-	mat4 lightProjMatrix = perspective(radians(45.0f), 1.0f, 25.0f, 100.0f);
-
-	///////////////////////////////////////////////////////////////////////////
-	// Bind the environment map(s) to unused texture units
-	///////////////////////////////////////////////////////////////////////////
-	glActiveTexture(GL_TEXTURE6);
-	glBindTexture(GL_TEXTURE_2D, environmentMap);
-	glActiveTexture(GL_TEXTURE0);
-
-	///////////////////////////////////////////////////////////////////////////
 	// Draw from camera
-	///////////////////////////////////////////////////////////////////////////
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(0, 0, windowWidth, windowHeight);
 	glClearColor(0.2f, 0.2f, 0.8f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	{
-		labhelper::perf::Scope s("Background");
-		drawBackground(viewMatrix, projMatrix);
-	}
-	{
-		labhelper::perf::Scope s("Scene");
-		drawScene(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
-	}
-	debugDrawLight(viewMatrix, projMatrix, vec3(lightPosition));
+	// Draw the scene
+	drawScene(raymarchingProgram, viewMatrix, projMatrix);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-/// This function is used to update the scene according to user input
-///////////////////////////////////////////////////////////////////////////////
+// This function is used to update the scene according to user input
+
 bool handleEvents(void)
 {
 	// check events (keyboard among other)
@@ -340,18 +193,14 @@ bool handleEvents(void)
 	return quitEvent;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-/// This function is to hold the general GUI logic
-///////////////////////////////////////////////////////////////////////////////
+// This function is to hold the general GUI logic
+
 void gui()
 {
 	// ----------------- Set variables --------------------------
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
 		ImGui::GetIO().Framerate);
 	// ----------------------------------------------------------
-
-	////////////////////////////////////////////////////////////////////////////////
-	////////////////////////////////////////////////////////////////////////////////
 
 	labhelper::perf::drawEventsWindow();
 }
@@ -391,10 +240,6 @@ int main(int argc, char* argv[])
 		// Swap front and back buffer. This frame will now been displayed.
 		SDL_GL_SwapWindow(g_window);
 	}
-	// Free Models
-	labhelper::freeModel(fighterModel);
-	labhelper::freeModel(landingpadModel);
-	labhelper::freeModel(sphereModel);
 
 	// Shut down everything. This includes the window and all other subsystems.
 	labhelper::shutDown(g_window);
