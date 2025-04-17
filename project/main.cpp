@@ -36,15 +36,17 @@ bool g_isMouseDragging = false;
 GLuint raymarchingProgram;
 
 // Camera parameters.
-vec3 cameraPosition(0.0f, 0.0f, 0.0f);
-vec3 cameraDirection = normalize(vec3(0.0f) - cameraPosition);
-float cameraSpeed = 10.f;
-
 vec3 worldUp(0.0f, 1.0f, 0.0f);
+vec3 cameraPosition(0.0f, 0.0f, 5.0f);
+vec3 cameraDirection = normalize(vec3(0.0f) - cameraPosition);
+vec3 cameraRight = cross(cameraDirection, worldUp);
+vec3 cameraUp = cross(cameraRight, cameraDirection);
+
+float cameraSpeed = 10.f;
 
 void loadShaders(bool is_reload)
 {
-	GLuint shader = labhelper::loadShaderProgram("../project/background.vert", "../project/background.frag", is_reload);
+	GLuint shader = labhelper::loadShaderProgram("../project/raymarching.vert", "../project/raymarching.frag", is_reload);
 	if (shader != 0)
 	{
 		raymarchingProgram = shader;
@@ -67,8 +69,17 @@ void drawScene(GLuint currentShaderProgram,
 {
 	glUseProgram(currentShaderProgram);
 
+	// uTime
+	labhelper::setUniformSlow(currentShaderProgram, "uTime", currentTime);
+
+	// uResolution
+	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
+
 	// camera
-	labhelper::setUniformSlow(currentShaderProgram, "viewInverse", inverse(viewMatrix));
+	labhelper::setUniformSlow(currentShaderProgram, "uCameraPos", cameraPosition);
+	labhelper::setUniformSlow(currentShaderProgram, "uCameraDir", cameraDirection);
+	labhelper::setUniformSlow(currentShaderProgram, "uCameraUp", cameraUp);
+	labhelper::setUniformSlow(currentShaderProgram, "uCameraRight", cameraRight);
 
 	labhelper::drawFullScreenQuad();
 }
@@ -106,7 +117,7 @@ void display(void)
 }
 
 // This function is used to update the scene according to user input
-
+// TODO: Fix the mouse dragging or delete it
 bool handleEvents(void)
 {
 	// check events (keyboard among other)
@@ -164,7 +175,6 @@ bool handleEvents(void)
 
 	// check keyboard state (which keys are still pressed)
 	const uint8_t* state = SDL_GetKeyboardState(nullptr);
-	vec3 cameraRight = cross(cameraDirection, worldUp);
 
 	if (state[SDL_SCANCODE_W])
 	{
@@ -182,13 +192,21 @@ bool handleEvents(void)
 	{
 		cameraPosition += cameraSpeed * deltaTime * cameraRight;
 	}
-	if (state[SDL_SCANCODE_Q])
+	if (state[SDL_SCANCODE_LCTRL])
 	{
 		cameraPosition -= cameraSpeed * deltaTime * worldUp;
 	}
-	if (state[SDL_SCANCODE_E])
+	if (state[SDL_SCANCODE_LSHIFT])
 	{
 		cameraPosition += cameraSpeed * deltaTime * worldUp;
+	}
+	if (state[SDL_SCANCODE_E])
+	{
+		cameraPosition += cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
+	}
+	if (state[SDL_SCANCODE_Q])
+	{
+		cameraPosition -= cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
 	}
 	return quitEvent;
 }
