@@ -688,6 +688,10 @@ namespace labhelper
 	{
 		glUniform3fv(glGetUniformLocation(shaderProgram, name), nof_values, (float*)values);
 	}
+	void setUniformSlow(GLuint shaderProgram, const char* name, const glm::vec2& value)
+	{
+		glUniform2fv(glGetUniformLocation(shaderProgram, name), 1, &value.x);
+	}
 
 	void debugDrawLine(const glm::mat4& viewMatrix,
 		const glm::mat4& projectionMatrix,
