@@ -142,8 +142,7 @@ bool handleEvents(void)
 				labhelper::showGUI();
 			}
 		}
-		if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT
-			&& (!labhelper::isGUIvisible() || !ImGui::GetIO().WantCaptureMouse))
+		if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT && (!labhelper::isGUIvisible() || !ImGui::GetIO().WantCaptureMouse))
 		{
 			g_isMouseDragging = true;
 			int x;
@@ -234,7 +233,7 @@ int main(int argc, char* argv[])
 
 	while (!stopRendering)
 	{
-		//update currentTime
+		// update currentTime
 		std::chrono::duration<float> timeSinceStart = std::chrono::system_clock::now() - startTime;
 		previousTime = currentTime;
 		currentTime = timeSinceStart.count();
