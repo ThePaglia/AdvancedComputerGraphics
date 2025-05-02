@@ -20,6 +20,8 @@ using namespace glm;
 #include <Model.h>
 #include "hdr.h"
 #include "fbo.h"
+#include <stb_image.h>
+#include <iostream>
 
 // Various globals
 SDL_Window* g_window = nullptr;
@@ -42,6 +44,9 @@ vec3 cameraDirection = normalize(vec3(0.0f) - cameraPosition);
 vec3 cameraRight = cross(cameraDirection, worldUp);
 vec3 cameraUp = cross(cameraRight, cameraDirection);
 
+// Texture parameters
+GLuint noiseTexture;
+
 float cameraSpeed = 10.f;
 
 void loadShaders(bool is_reload)
@@ -53,6 +58,28 @@ void loadShaders(bool is_reload)
 	}
 }
 
+void loadNoiseTexture(const std::string& filepath)
+{
+	int width, height, channels;
+	unsigned char* data = stbi_load(filepath.c_str(), &width, &height, &channels, 0);
+	if (!data)
+	{
+		std::cerr << "Failed to load texture: " << filepath << std::endl;
+		return;
+	}
+
+	glGenTextures(1, &noiseTexture);
+	glBindTexture(GL_TEXTURE_2D, noiseTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+	glGenerateMipmap(GL_TEXTURE_2D);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	stbi_image_free(data);
+}
+
 // This function is called once at the start of the program and never again
 void initialize()
 {
@@ -60,6 +87,9 @@ void initialize()
 
 	// Load Shaders
 	loadShaders(false);
+
+	// Load noise texture
+	loadNoiseTexture("../textures/noise.png");
 }
 
 // This function is used to draw the main objects on the scene
@@ -68,6 +98,11 @@ void drawScene(GLuint currentShaderProgram,
 	const mat4& projectionMatrix)
 {
 	glUseProgram(currentShaderProgram);
+
+	// Bind the noise texture
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, noiseTexture);
+	labhelper::setUniformSlow(currentShaderProgram, "uNoiseTexture", 0);
 
 	// uTime
 	labhelper::setUniformSlow(currentShaderProgram, "uTime", currentTime);
