@@ -219,9 +219,10 @@ bool handleEvents(void)
 			int delta_y = event.motion.y - g_prevMouseCoords.y;
 			float rotationSpeed = 0.1f;
 			mat4 yaw = rotate(rotationSpeed * deltaTime * -delta_x, worldUp);
+			cameraRight = normalize(cross(cameraDirection, worldUp));
 			mat4 pitch = rotate(rotationSpeed * deltaTime * -delta_y,
-				normalize(cross(cameraDirection, worldUp)));
-			cameraDirection = vec3(pitch * yaw * vec4(cameraDirection, 0.0f));
+				cameraRight);
+			cameraDirection = vec3(yaw * vec4(cameraDirection, 0.0f));
 			g_prevMouseCoords.x = event.motion.x;
 			g_prevMouseCoords.y = event.motion.y;
 		}
@@ -256,12 +257,13 @@ bool handleEvents(void)
 	}
 	if (state[SDL_SCANCODE_E])
 	{
-		cameraPosition += cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
+		//cameraPosition += cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
 	}
 	if (state[SDL_SCANCODE_Q])
 	{
-		cameraPosition -= cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
+		//cameraPosition -= cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
 	}
+
 	return quitEvent;
 }
 
