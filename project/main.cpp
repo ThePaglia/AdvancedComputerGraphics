@@ -39,8 +39,8 @@ GLuint raymarchingProgram;
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
-vec3 cameraPosition(0.0f, 0.0f, 5.0f);
-vec3 cameraDirection = normalize(vec3(0.0f) - cameraPosition);
+vec3 cameraPosition(0.0f, 0.0f, -5.0f);
+vec3 cameraDirection = normalize(vec3(0.0f) + cameraPosition);
 vec3 cameraRight = cross(cameraDirection, worldUp);
 vec3 cameraUp = cross(cameraRight, cameraDirection);
 
@@ -112,7 +112,7 @@ void drawScene(GLuint currentShaderProgram,
 
 	// camera
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraPos", cameraPosition);
-	labhelper::setUniformSlow(currentShaderProgram, "uCameraDir", cameraDirection);
+	labhelper::setUniformSlow(currentShaderProgram, "uCameraDir", -cameraDirection);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraUp", cameraUp);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraRight", cameraRight);
 
@@ -197,12 +197,19 @@ bool handleEvents(void)
 			// More info at https://wiki.libsdl.org/SDL_MouseMotionEvent
 			int delta_x = event.motion.x - g_prevMouseCoords.x;
 			int delta_y = event.motion.y - g_prevMouseCoords.y;
-			float rotationSpeed = 0.1f;
+			float rotationSpeed = -0.1f;
+			// Calculate yaw, i.e. rotation around y axis
 			mat4 yaw = rotate(rotationSpeed * deltaTime * -delta_x, worldUp);
-			cameraRight = normalize(cross(cameraDirection, worldUp));
-			mat4 pitch = rotate(rotationSpeed * deltaTime * -delta_y,
-				cameraRight);
+			// Apply yaw to direction
 			cameraDirection = vec3(yaw * vec4(cameraDirection, 0.0f));
+			// Calculate right vector from new direction
+			cameraRight = normalize(cross(cameraDirection, worldUp));
+			// Calculate pitch around new cameraRight
+			mat4 pitch = rotate(rotationSpeed * deltaTime * -delta_y, cameraRight);
+			// Apply pitch to direction
+			cameraDirection = vec3(pitch * vec4(cameraDirection, 0.0f));
+			// Calculate cameraUp from new direction
+			cameraUp = cross(cameraRight, cameraDirection);
 			g_prevMouseCoords.x = event.motion.x;
 			g_prevMouseCoords.y = event.motion.y;
 		}
@@ -213,11 +220,11 @@ bool handleEvents(void)
 
 	if (state[SDL_SCANCODE_W])
 	{
-		cameraPosition += cameraSpeed * deltaTime * cameraDirection;
+		cameraPosition -= cameraSpeed * deltaTime * cameraDirection;
 	}
 	if (state[SDL_SCANCODE_S])
 	{
-		cameraPosition -= cameraSpeed * deltaTime * cameraDirection;
+		cameraPosition += cameraSpeed * deltaTime * cameraDirection;
 	}
 	if (state[SDL_SCANCODE_A])
 	{
@@ -243,6 +250,8 @@ bool handleEvents(void)
 	{
 		//cameraPosition -= cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
 	}
+
+
 
 	return quitEvent;
 }
