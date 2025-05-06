@@ -44,10 +44,16 @@ vec3 cameraDirection = normalize(vec3(0.0f) - cameraPosition);
 vec3 cameraRight = cross(cameraDirection, worldUp);
 vec3 cameraUp = cross(cameraRight, cameraDirection);
 
+float cameraSpeed = 10.f;
+
 // Texture parameters
 GLuint noiseTexture;
 
-float cameraSpeed = 10.f;
+// Light parameters
+vec3 lightPosition;
+vec3 pointLightColor = vec3(1.f, 1.f, 1.f);
+
+float pointLightIntensityMultiplier = 10000.0f;
 
 void loadShaders(bool is_reload)
 {
@@ -90,6 +96,9 @@ void initialize()
 
 	// Load noise texture
 	loadNoiseTexture("../textures/noise.png");
+
+	glEnable(GL_DEPTH_TEST); // enable Z-buffering
+	glEnable(GL_CULL_FACE);	 // enables backface culling
 }
 
 // This function is used to draw the main objects on the scene
@@ -104,13 +113,22 @@ void drawScene(GLuint currentShaderProgram,
 	glBindTexture(GL_TEXTURE_2D, noiseTexture);
 	labhelper::setUniformSlow(currentShaderProgram, "uNoiseTexture", 0);
 
+	// Light source
+	vec4 viewSpaceLightPosition = viewMatrix * vec4(lightPosition, 1.0f);
+	labhelper::setUniformSlow(currentShaderProgram, "pointLightColor", pointLightColor);
+	labhelper::setUniformSlow(currentShaderProgram, "pointLightIntensityMultiplier",
+		pointLightIntensityMultiplier);
+	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightPosition", vec3(viewSpaceLightPosition));
+	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightDir",
+		normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
+
 	// uTime
 	labhelper::setUniformSlow(currentShaderProgram, "uTime", currentTime);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
 
-	// camera
+	// Camera
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraPos", cameraPosition);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraDir", cameraDirection);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraUp", cameraUp);
@@ -141,6 +159,9 @@ void display(void)
 	mat4 projMatrix = perspective(radians(45.0f), float(windowWidth) / float(windowHeight), 5.0f, 2000.0f);
 	mat4 viewMatrix = lookAt(cameraPosition, cameraPosition + cameraDirection, worldUp);
 
+	vec4 lightStartPosition = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
+
 	// Draw from camera
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(0, 0, windowWidth, windowHeight);
@@ -152,7 +173,6 @@ void display(void)
 }
 
 // This function is used to update the scene according to user input
-// TODO: Fix the mouse dragging or delete it
 bool handleEvents(void)
 {
 	// check events (keyboard among other)
