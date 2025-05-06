@@ -224,7 +224,7 @@ bool handleEvents(void)
 			// Calculate pitch around new cameraRight
 			mat4 pitch = rotate(rotationSpeed * deltaTime * -delta_y, cameraRight);
 			// Apply pitch to direction
-			cameraDirection = vec3(pitch * vec4(cameraDirection, 0.0f));
+			//cameraDirection = vec3(pitch * vec4(cameraDirection, 0.0f));
 			// Calculate cameraUp from new direction
 			cameraUp = cross(cameraRight, cameraDirection);
 			g_prevMouseCoords.x = event.motion.x;

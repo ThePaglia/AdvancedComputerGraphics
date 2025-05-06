@@ -63,7 +63,7 @@ float scene(vec3 p) {
 	float plane = p.y + 1.0;
 	float sphere = sdSphere(p, 1.0);
 	float f = fbm(p);
-	float distance = min(sphere + f, plane);
+	float distance = min(sphere + f, plane + f);
 	return -distance;
 }
 
