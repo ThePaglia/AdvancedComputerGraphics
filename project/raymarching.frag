@@ -14,11 +14,16 @@ uniform vec3 uCameraDir;
 
 // Light
 uniform vec3 pointLightColor;
-uniform vec3 viewSpaceLightPosition;
+uniform vec3 lightPosition;
 uniform float pointLightIntensityMultiplier;
-uniform vec3 viewSpaceLightDir;
 
+// Cloud
+const vec3 ambientColor = vec3(0.60, 0.60, 0.75);
+const float ambientIntensity = 1.1;
+
+// Raymarching
 #define MAX_STEPS 100
+const float MARCH_SIZE = 0.08;
 
 float sdSphere(vec3 p, float radius) {
 	return length(p) - radius;
@@ -62,18 +67,20 @@ float scene(vec3 p) {
 	return -distance;
 }
 
-const float MARCH_SIZE = 0.08;
-
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection) {
 	float depth = 0.0;
 	vec3 p = rayOrigin + rayDirection * depth;
 	vec4 res = vec4(0.0);
+	vec3 lightDirection = normalize(lightPosition);
 
 	for(int i = 0; i < MAX_STEPS; i++) {
 		float density = scene(p);
 
 		if(density > 0.0) {
+			float diffuse = clamp((scene(p) - scene(p + 0.3 * lightDirection)) / 0.3, 0.0, 1.0);
+			vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
 			vec4 color = vec4(mix(vec3(1.0, 1.0, 1.0), vec3(0.0, 0.0, 0.0), density), density);
+			color.rgb *= lin;
 			color.rgb *= color.a;
 			res += color * (1.0 - res.a);
 		}
@@ -88,7 +95,7 @@ void main() {
 	vec2 uv = gl_FragCoord.xy / uResolution.xy;
 	uv -= 0.5;
 	uv.x *= uResolution.x / uResolution.y;
-
+	
 	// Ray Origin - camera
 	vec3 rayOrigin = uCameraPos;
 	// Ray Direction

@@ -50,10 +50,10 @@ float cameraSpeed = 10.f;
 GLuint noiseTexture;
 
 // Light parameters
-vec3 lightPosition;
-vec3 pointLightColor = vec3(1.f, 1.f, 1.f);
+vec3 lightPosition = vec3(0.0f, 1.0f, 0.0f);
+vec3 pointLightColor = vec3(1.0f, 0.6f, 0.3f);
 
-float pointLightIntensityMultiplier = 10000.0f;
+float pointLightIntensityMultiplier = 0.8f;
 
 void loadShaders(bool is_reload)
 {
@@ -114,13 +114,10 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "uNoiseTexture", 0);
 
 	// Light source
-	vec4 viewSpaceLightPosition = viewMatrix * vec4(lightPosition, 1.0f);
 	labhelper::setUniformSlow(currentShaderProgram, "pointLightColor", pointLightColor);
 	labhelper::setUniformSlow(currentShaderProgram, "pointLightIntensityMultiplier",
 		pointLightIntensityMultiplier);
-	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightPosition", vec3(viewSpaceLightPosition));
-	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightDir",
-		normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
+	labhelper::setUniformSlow(currentShaderProgram, "lightPosition", lightPosition);
 
 	// uTime
 	labhelper::setUniformSlow(currentShaderProgram, "uTime", currentTime);
@@ -159,8 +156,8 @@ void display(void)
 	mat4 projMatrix = perspective(radians(45.0f), float(windowWidth) / float(windowHeight), 5.0f, 2000.0f);
 	mat4 viewMatrix = lookAt(cameraPosition, cameraPosition + cameraDirection, worldUp);
 
-	vec4 lightStartPosition = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-	lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
+	// vec4 lightStartPosition = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	// lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
 
 	// Draw from camera
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -264,14 +261,12 @@ bool handleEvents(void)
 	}
 	if (state[SDL_SCANCODE_E])
 	{
-		//cameraPosition += cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
+		// cameraPosition += cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
 	}
 	if (state[SDL_SCANCODE_Q])
 	{
-		//cameraPosition -= cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
+		// cameraPosition -= cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
 	}
-
-
 
 	return quitEvent;
 }
