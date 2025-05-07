@@ -20,6 +20,7 @@ uniform float pointLightIntensityMultiplier;
 // Cloud
 const vec3 ambientColor = vec3(0.60, 0.60, 0.75);
 const float ambientIntensity = 1.1;
+uniform float cloudMovementSpeed = 1.0f;
 
 // Raymarching
 #define MAX_STEPS 100
@@ -42,7 +43,7 @@ float noise(vec3 x) {
 
 // Fractal Brownian Motion
 float fbm(vec3 p) {
-	vec3 q = p + uTime * 0.5 * vec3(1.0, -0.2, -1.0);
+	vec3 q = p + uTime * cloudMovementSpeed * vec3(1.0, -0.2, -1.0);
 	float g = noise(q);
 
 	float f = 0.0;

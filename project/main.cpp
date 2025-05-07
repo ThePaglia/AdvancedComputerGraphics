@@ -52,6 +52,9 @@ GLuint noiseTexture;
 vec3 lightPosition = vec3(0.0f, 1.0f, 0.0f);
 vec3 pointLightColor = vec3(1.0f, 0.6f, 0.3f);
 
+// Cloud parameters
+float cloudMovementSpeed = 0.5f;
+
 float pointLightIntensityMultiplier = 0.8f;
 
 void loadShaders(bool is_reload)
@@ -120,6 +123,7 @@ void drawScene(GLuint currentShaderProgram,
 
 	// uTime
 	labhelper::setUniformSlow(currentShaderProgram, "uTime", currentTime);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudMovementSpeed", cloudMovementSpeed);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
@@ -272,7 +276,7 @@ void gui()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
 		ImGui::GetIO().Framerate);
 	// ----------------------------------------------------------
-
+	ImGui::SliderFloat("Cloud speed", &cloudMovementSpeed, 0.0f, 1.0f);
 	labhelper::perf::drawEventsWindow();
 }
 
