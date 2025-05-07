@@ -20,6 +20,8 @@ using namespace glm;
 #include <Model.h>
 #include "hdr.h"
 #include "fbo.h"
+#include <stb_image.h>
+#include <iostream>
 
 // Various globals
 SDL_Window* g_window = nullptr;
@@ -29,20 +31,32 @@ float deltaTime = 0.0f;
 int windowWidth, windowHeight;
 
 // Mouse input
-ivec2 g_prevMouseCoords = { -1, -1 };
-bool g_isMouseDragging = false;
+bool g_doMouseLookaround = false;
 
 // Shader programs
 GLuint raymarchingProgram;
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
-vec3 cameraPosition(0.0f, 0.0f, 5.0f);
-vec3 cameraDirection = normalize(vec3(0.0f) - cameraPosition);
+vec3 cameraPosition(0.0f, 0.0f, -5.0f);
+vec3 cameraDirection = normalize(vec3(0.0f) + cameraPosition);
 vec3 cameraRight = cross(cameraDirection, worldUp);
 vec3 cameraUp = cross(cameraRight, cameraDirection);
 
 float cameraSpeed = 10.f;
+
+// Texture parameters
+GLuint noiseTexture;
+
+// Light parameters
+vec3 lightPosition = vec3(0.0f, 1.0f, 0.0f);
+vec3 pointLightColor = vec3(1.0f, 0.6f, 0.3f);
+
+// Cloud parameters
+float cloudMovementSpeed = 0.1f;
+float cloudTime = 0.0f;
+
+float pointLightIntensityMultiplier = 0.8f;
 
 void loadShaders(bool is_reload)
 {
@@ -53,6 +67,28 @@ void loadShaders(bool is_reload)
 	}
 }
 
+void loadNoiseTexture(const std::string& filepath)
+{
+	int width, height, channels;
+	unsigned char* data = stbi_load(filepath.c_str(), &width, &height, &channels, 0);
+	if (!data)
+	{
+		std::cerr << "Failed to load texture: " << filepath << std::endl;
+		return;
+	}
+
+	glGenTextures(1, &noiseTexture);
+	glBindTexture(GL_TEXTURE_2D, noiseTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+	glGenerateMipmap(GL_TEXTURE_2D);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	stbi_image_free(data);
+}
+
 // This function is called once at the start of the program and never again
 void initialize()
 {
@@ -60,6 +96,12 @@ void initialize()
 
 	// Load Shaders
 	loadShaders(false);
+
+	// Load noise texture
+	loadNoiseTexture("../textures/noise.png");
+
+	glEnable(GL_DEPTH_TEST); // enable Z-buffering
+	glEnable(GL_CULL_FACE);	 // enables backface culling
 }
 
 // This function is used to draw the main objects on the scene
@@ -69,13 +111,25 @@ void drawScene(GLuint currentShaderProgram,
 {
 	glUseProgram(currentShaderProgram);
 
+	// Bind the noise texture
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, noiseTexture);
+	labhelper::setUniformSlow(currentShaderProgram, "uNoiseTexture", 0);
+
+	// Light source
+	labhelper::setUniformSlow(currentShaderProgram, "pointLightColor", pointLightColor);
+	labhelper::setUniformSlow(currentShaderProgram, "pointLightIntensityMultiplier",
+		pointLightIntensityMultiplier);
+	labhelper::setUniformSlow(currentShaderProgram, "lightPosition", lightPosition);
+
 	// uTime
 	labhelper::setUniformSlow(currentShaderProgram, "uTime", currentTime);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudTime", cloudTime);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
 
-	// camera
+	// Camera
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraPos", cameraPosition);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraDir", cameraDirection);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraUp", cameraUp);
@@ -106,18 +160,22 @@ void display(void)
 	mat4 projMatrix = perspective(radians(45.0f), float(windowWidth) / float(windowHeight), 5.0f, 2000.0f);
 	mat4 viewMatrix = lookAt(cameraPosition, cameraPosition + cameraDirection, worldUp);
 
+	// vec4 lightStartPosition = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	// lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
+
 	// Draw from camera
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(0, 0, windowWidth, windowHeight);
 	glClearColor(0.2f, 0.2f, 0.8f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+	cloudTime += deltaTime * cloudMovementSpeed;
+
 	// Draw the scene
 	drawScene(raymarchingProgram, viewMatrix, projMatrix);
 }
 
 // This function is used to update the scene according to user input
-// TODO: Fix the mouse dragging or delete it
 bool handleEvents(void)
 {
 	// check events (keyboard among other)
@@ -144,31 +202,33 @@ bool handleEvents(void)
 		}
 		if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT && (!labhelper::isGUIvisible() || !ImGui::GetIO().WantCaptureMouse))
 		{
-			g_isMouseDragging = true;
 			int x;
 			int y;
 			SDL_GetMouseState(&x, &y);
-			g_prevMouseCoords.x = x;
-			g_prevMouseCoords.y = y;
+		}
+		if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT && (!labhelper::isGUIvisible() || !ImGui::GetIO().WantCaptureMouse)) {
+			g_doMouseLookaround = !g_doMouseLookaround;
+			SDL_SetRelativeMouseMode(g_doMouseLookaround ? SDL_TRUE : SDL_FALSE);
 		}
 
-		if (!(SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT)))
-		{
-			g_isMouseDragging = false;
-		}
-
-		if (event.type == SDL_MOUSEMOTION && g_isMouseDragging)
+		if (event.type == SDL_MOUSEMOTION && g_doMouseLookaround)
 		{
 			// More info at https://wiki.libsdl.org/SDL_MouseMotionEvent
-			int delta_x = event.motion.x - g_prevMouseCoords.x;
-			int delta_y = event.motion.y - g_prevMouseCoords.y;
-			float rotationSpeed = 0.1f;
+			int delta_x = event.motion.xrel;
+			int delta_y = event.motion.yrel;
+			float rotationSpeed = -0.1f;
+			// Calculate yaw, i.e. rotation around y axis
 			mat4 yaw = rotate(rotationSpeed * deltaTime * -delta_x, worldUp);
-			mat4 pitch = rotate(rotationSpeed * deltaTime * -delta_y,
-				normalize(cross(cameraDirection, worldUp)));
-			cameraDirection = vec3(pitch * yaw * vec4(cameraDirection, 0.0f));
-			g_prevMouseCoords.x = event.motion.x;
-			g_prevMouseCoords.y = event.motion.y;
+			// Apply yaw to direction
+			cameraDirection = vec3(yaw * vec4(cameraDirection, 0.0f));
+			// Calculate right vector from new direction
+			cameraRight = normalize(cross(cameraDirection, worldUp));
+			// Calculate pitch around new cameraRight
+			mat4 pitch = rotate(rotationSpeed * deltaTime * -delta_y, cameraRight);
+			// Apply pitch to direction
+			cameraDirection = vec3(pitch * vec4(cameraDirection, 0.0f));
+			// Calculate cameraUp from new direction and cameraRight
+			cameraUp = cross(cameraRight, cameraDirection);
 		}
 	}
 
@@ -177,11 +237,11 @@ bool handleEvents(void)
 
 	if (state[SDL_SCANCODE_W])
 	{
-		cameraPosition += cameraSpeed * deltaTime * cameraDirection;
+		cameraPosition -= cameraSpeed * deltaTime * cameraDirection;
 	}
 	if (state[SDL_SCANCODE_S])
 	{
-		cameraPosition -= cameraSpeed * deltaTime * cameraDirection;
+		cameraPosition += cameraSpeed * deltaTime * cameraDirection;
 	}
 	if (state[SDL_SCANCODE_A])
 	{
@@ -201,12 +261,13 @@ bool handleEvents(void)
 	}
 	if (state[SDL_SCANCODE_E])
 	{
-		cameraPosition += cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
+		// cameraPosition += cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
 	}
 	if (state[SDL_SCANCODE_Q])
 	{
-		cameraPosition -= cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
+		// cameraPosition -= cameraSpeed * deltaTime * normalize(cross(cameraDirection, worldUp));
 	}
+
 	return quitEvent;
 }
 
@@ -218,7 +279,7 @@ void gui()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
 		ImGui::GetIO().Framerate);
 	// ----------------------------------------------------------
-
+	ImGui::SliderFloat("Cloud speed", &cloudMovementSpeed, 0.0f, 1.0f);
 	labhelper::perf::drawEventsWindow();
 }
 
