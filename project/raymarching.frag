@@ -61,10 +61,11 @@ float fbm(vec3 p) {
 
 float scene(vec3 p) {
 	float plane = p.y + 1.0;
-	float sphere = sdSphere(p, 1.0);
+	float sphere = sdSphere(p + vec3(0, -0.5f, 0), 1.0);
 	float f = fbm(p);
-	float distance = min(sphere + f, plane + f);
-	return -distance;
+	float atmosphere = -1 / (1 + p.y * p.y) * 0.01f;
+	float density = min(min(plane, sphere) + f, atmosphere);
+	return -density;
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection) {
