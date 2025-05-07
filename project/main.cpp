@@ -127,7 +127,7 @@ void drawScene(GLuint currentShaderProgram,
 
 	// Camera
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraPos", cameraPosition);
-	labhelper::setUniformSlow(currentShaderProgram, "uCameraDir", -cameraDirection);
+	labhelper::setUniformSlow(currentShaderProgram, "uCameraDir", cameraDirection);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraUp", cameraUp);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraRight", cameraRight);
 
@@ -224,8 +224,8 @@ bool handleEvents(void)
 			// Calculate pitch around new cameraRight
 			mat4 pitch = rotate(rotationSpeed * deltaTime * -delta_y, cameraRight);
 			// Apply pitch to direction
-			//cameraDirection = vec3(pitch * vec4(cameraDirection, 0.0f));
-			// Calculate cameraUp from new direction
+			cameraDirection = vec3(pitch * vec4(cameraDirection, 0.0f));
+			// Calculate cameraUp from new direction and cameraRight
 			cameraUp = cross(cameraRight, cameraDirection);
 			g_prevMouseCoords.x = event.motion.x;
 			g_prevMouseCoords.y = event.motion.y;

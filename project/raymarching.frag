@@ -91,7 +91,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection) {
 }
 
 void main() {
-	mat3 uCameraMatrix = mat3(uCameraRight, uCameraUp, -uCameraDir);
+	mat3 uCameraMatrix = transpose(mat3(uCameraRight, uCameraUp, uCameraDir));
 	vec2 uv = gl_FragCoord.xy / uResolution.xy;
 	uv -= 0.5;
 	uv.x *= uResolution.x / uResolution.y;
