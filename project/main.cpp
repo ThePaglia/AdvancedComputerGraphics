@@ -54,6 +54,7 @@ vec3 pointLightColor = vec3(1.0f, 0.6f, 0.3f);
 
 // Cloud parameters
 float cloudMovementSpeed = 0.5f;
+float cloudTime = 0.0f;
 
 float pointLightIntensityMultiplier = 0.8f;
 
@@ -123,7 +124,7 @@ void drawScene(GLuint currentShaderProgram,
 
 	// uTime
 	labhelper::setUniformSlow(currentShaderProgram, "uTime", currentTime);
-	labhelper::setUniformSlow(currentShaderProgram, "cloudMovementSpeed", cloudMovementSpeed);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudTime", cloudTime);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
@@ -167,6 +168,8 @@ void display(void)
 	glViewport(0, 0, windowWidth, windowHeight);
 	glClearColor(0.2f, 0.2f, 0.8f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	cloudTime += deltaTime * cloudMovementSpeed;
 
 	// Draw the scene
 	drawScene(raymarchingProgram, viewMatrix, projMatrix);
