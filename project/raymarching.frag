@@ -19,12 +19,13 @@ uniform float pointLightIntensityMultiplier;
 
 // Cloud
 const vec3 ambientColor = vec3(0.60, 0.60, 0.75);
-const float ambientIntensity = 1.1;
+const float ambientIntensity = 0.9f;
 uniform float cloudTime = 1.0f;
 
 // Raymarching
 #define MAX_STEPS 100
-const float MARCH_SIZE = 0.08;
+const float MARCH_SIZE = 0.1;
+uniform sampler2D uBlueNoise;
 
 float sdSphere(vec3 p, float radius) {
 	return length(p) - radius;
@@ -61,16 +62,17 @@ float fbm(vec3 p) {
 }
 
 float scene(vec3 p) {
-	float plane = p.y + 1.0;
+	float plane = p.y + 1;
 	float sphere = sdSphere(p + vec3(0, -0.5f, 0), 1.0);
 	float f = fbm(p);
-	float atmosphere = -1 / (1 + p.y * p.y) * 0.01f;
-	float density = min(min(plane, sphere) + f, atmosphere);
+	float atmosphere = -1 / (1 + p.y * p.y * 0.5f) * 0.01f;
+	float density = min(min(plane + f, sphere + f), atmosphere);
 	return -density;
 }
 
-vec4 raymarch(vec3 rayOrigin, vec3 rayDirection) {
+vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, float offset) {
 	float depth = 0.0;
+	depth += MARCH_SIZE * offset;
 	vec3 p = rayOrigin + rayDirection * depth;
 	vec4 res = vec4(0.0);
 	vec3 lightDirection = normalize(lightPosition);
@@ -104,7 +106,9 @@ void main() {
 	vec3 rayDirection = normalize(vec3(uv, -1.0) * uCameraMatrix);
 
 	vec3 color = vec3(0.0);
-	vec4 res = raymarch(rayOrigin, rayDirection);
+	float blueNoise = texture2D(uBlueNoise, gl_FragCoord.xy / 100).r;
+	float offset = fract(blueNoise);
+	vec4 res = raymarch(rayOrigin, rayDirection, offset);
 	color = res.rgb;
 
 	fragmentColor = vec4(color, 1.0);

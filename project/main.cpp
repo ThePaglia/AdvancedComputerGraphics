@@ -53,7 +53,7 @@ vec3 lightPosition = vec3(0.0f, 1.0f, 0.0f);
 vec3 pointLightColor = vec3(1.0f, 0.6f, 0.3f);
 
 // Cloud parameters
-float cloudMovementSpeed = 0.5f;
+float cloudMovementSpeed = 0.1f;
 float cloudTime = 0.0f;
 
 float pointLightIntensityMultiplier = 0.8f;
