@@ -31,8 +31,7 @@ float deltaTime = 0.0f;
 int windowWidth, windowHeight;
 
 // Mouse input
-ivec2 g_prevMouseCoords = { -1, -1 };
-bool g_isMouseDragging = false;
+bool g_doMouseLookaround = false;
 
 // Shader programs
 GLuint raymarchingProgram;
@@ -196,24 +195,20 @@ bool handleEvents(void)
 		}
 		if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT && (!labhelper::isGUIvisible() || !ImGui::GetIO().WantCaptureMouse))
 		{
-			g_isMouseDragging = true;
 			int x;
 			int y;
 			SDL_GetMouseState(&x, &y);
-			g_prevMouseCoords.x = x;
-			g_prevMouseCoords.y = y;
+		}
+		if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT && (!labhelper::isGUIvisible() || !ImGui::GetIO().WantCaptureMouse)) {
+			g_doMouseLookaround = !g_doMouseLookaround;
+			SDL_SetRelativeMouseMode(g_doMouseLookaround ? SDL_TRUE : SDL_FALSE);
 		}
 
-		if (!(SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT)))
-		{
-			g_isMouseDragging = false;
-		}
-
-		if (event.type == SDL_MOUSEMOTION && g_isMouseDragging)
+		if (event.type == SDL_MOUSEMOTION && g_doMouseLookaround)
 		{
 			// More info at https://wiki.libsdl.org/SDL_MouseMotionEvent
-			int delta_x = event.motion.x - g_prevMouseCoords.x;
-			int delta_y = event.motion.y - g_prevMouseCoords.y;
+			int delta_x = event.motion.xrel;
+			int delta_y = event.motion.yrel;
 			float rotationSpeed = -0.1f;
 			// Calculate yaw, i.e. rotation around y axis
 			mat4 yaw = rotate(rotationSpeed * deltaTime * -delta_x, worldUp);
@@ -227,8 +222,6 @@ bool handleEvents(void)
 			cameraDirection = vec3(pitch * vec4(cameraDirection, 0.0f));
 			// Calculate cameraUp from new direction and cameraRight
 			cameraUp = cross(cameraRight, cameraDirection);
-			g_prevMouseCoords.x = event.motion.x;
-			g_prevMouseCoords.y = event.motion.y;
 		}
 	}
 
