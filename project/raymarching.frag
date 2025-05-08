@@ -90,10 +90,11 @@ float smoothmin(float a, float b, float k) {
     return mix(a, b, h) - k*h*(1.0-h);    
 }
 
-bool hitOpaque(vec3 p) {
-	float sphere = sdSphere(p + vec3(2, -0.5f, 0), 1.0);
-	float sphere2 = sdSphere(p + vec3(2, -2.5f + sin(uTime), 0), 1.0);
-	return smoothmin(sphere, sphere2, 0.75f) < 0;
+bool hitOpaque(vec3 p, out vec4 color) {
+	float noise = noise(p * vec3(1, 0, 1));
+	float plane = p.y + 4 + noise * 0.3f;
+	color = noise > 0.9 ? vec4(0, 0.3, 0.5, 1) : vec4(0.8, 0.8, 0.8, 1) * (1 - noise) + vec4(0.2, 0.5, 0.2, 1) * noise;
+	return plane < 0;
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, float offset) {
@@ -104,9 +105,10 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, float offset) {
 	vec3 lightDirection = normalize(lightPosition);
 
 	for(int i = 0; i < MAX_STEPS; i++) {
-		bool hitOpaque = hitOpaque(p);
+		vec4 opaqueColor;
+		bool hitOpaque = hitOpaque(p, opaqueColor);
 		if(hitOpaque) {
-			return res + vec4(1, 0, 0, 1) * (1.0 - res.a);
+			return res + opaqueColor * (1.0 - res.a);
 		}
 
 		float density = evaluateDensityAt(p);
