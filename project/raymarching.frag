@@ -61,13 +61,39 @@ float fbm(vec3 p) {
 	return f;
 }
 
-float scene(vec3 p) {
+float evaluateDensityAt(vec3 p) {
 	float sphere = sdSphere(p + vec3(0, -0.5f, 0), 1.0);
 	float f = fbm(p);
 	float plane = abs(p.y + 2) + f;
 	float atmosphere = -1 / (1 + p.y * p.y * 0.5f) * 0.01f;
 	float density = min(min(plane, sphere + f), atmosphere);
 	return -density;
+}
+
+// Stolen from https://www.shadertoy.com/view/Ml3Gz8
+float smoothmin(float a, float b, float k) {
+    
+    // Compute the difference between the two values.
+    // This is used to interpolate both values inside the range (-k, k).
+    // Smaller ranges give a better approximation of the min function.
+    float h = a - b;
+    
+    // The interval [-k, k] is mapped to [0, 1],
+    // and clamping takes place only after this transformation.
+    
+    // Map [-k, k] to [0, 1] and clamp if outside the latter.
+    h = clamp(0.5 + 0.5*h/k, 0.0, 1.0);    
+    
+    // Linearly interpolate the input values using h inside (0, 1).
+    // The second term ensures continuous derivatives at the boundaries of [0,1],
+    // but this is not completely obvious! See my blog post for details.
+    return mix(a, b, h) - k*h*(1.0-h);    
+}
+
+bool hitOpaque(vec3 p) {
+	float sphere = sdSphere(p + vec3(2, -0.5f, 0), 1.0);
+	float sphere2 = sdSphere(p + vec3(2, -2.5f + sin(uTime), 0), 1.0);
+	return smoothmin(sphere, sphere2, 0.75f) < 0;
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, float offset) {
@@ -78,16 +104,22 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, float offset) {
 	vec3 lightDirection = normalize(lightPosition);
 
 	for(int i = 0; i < MAX_STEPS; i++) {
-		float density = scene(p);
+		bool hitOpaque = hitOpaque(p);
+		if(hitOpaque) {
+			return res + vec4(1, 0, 0, 1) * (1.0 - res.a);
+		}
+
+		float density = evaluateDensityAt(p);
 
 		if(density > 0.0) {
-			float diffuse = clamp((scene(p) - scene(p + 0.3 * lightDirection)) / 0.3, 0.0, 1.0);
+			float diffuse = clamp((evaluateDensityAt(p) - evaluateDensityAt(p + 0.3 * lightDirection)) / 0.3, 0.0, 1.0);
 			vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
 			vec4 color = vec4(mix(vec3(1.0, 1.0, 1.0), vec3(0.0, 0.0, 0.0), density), density);
 			color.rgb *= lin;
 			color.rgb *= color.a;
 			res += color * (1.0 - res.a);
 		}
+
 		depth += MARCH_SIZE;
 		p = rayOrigin + rayDirection * depth;
 	}

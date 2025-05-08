@@ -43,7 +43,7 @@ vec3 cameraDirection = normalize(vec3(0.0f) + cameraPosition);
 vec3 cameraRight = cross(cameraDirection, worldUp);
 vec3 cameraUp = cross(cameraRight, cameraDirection);
 
-float cameraSpeed = 10.f;
+float cameraSpeed = 1.f;
 
 // Texture parameters
 GLuint noiseTexture;
