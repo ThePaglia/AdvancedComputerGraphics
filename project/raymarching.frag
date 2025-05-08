@@ -66,8 +66,8 @@ float scene(vec3 p) {
 	float f = fbm(p);
 	float plane = abs(p.y + 2) + f;
 	float atmosphere = -1 / (1 + p.y * p.y * 0.5f) * 0.01f;
-	float density = min(min(plane, sphere + f), atmosphere);
-	return -density;
+	float density = min(min(plane, sphere + f), 1000);
+	return -(sphere + f);
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, float offset) {
@@ -88,7 +88,12 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, float offset) {
 			color.rgb *= color.a;
 			res += color * (1.0 - res.a);
 		}
-		depth += MARCH_SIZE;
+		if(density < 0.0f) {
+			depth += -density + MARCH_SIZE - 0.2f;
+		} else {
+			depth += MARCH_SIZE;
+		}
+
 		p = rayOrigin + rayDirection * depth;
 	}
 	return res;
@@ -107,7 +112,7 @@ void main() {
 
 	vec3 color = vec3(0.0);
 	float blueNoise = texture2D(uBlueNoise, gl_FragCoord.xy / 100).r;
-	float offset = fract(blueNoise);
+	float offset = 0;//fract(blueNoise);
 	vec4 res = raymarch(rayOrigin, rayDirection, offset);
 	color = res.rgb;
 
