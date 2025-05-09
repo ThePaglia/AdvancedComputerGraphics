@@ -24,13 +24,20 @@ uniform float cloudTime = 1.0f;
 
 // Raymarching
 #define MAX_STEPS 200
-#define MAX_MARCH_DISTANCE 50
+#define MAX_MARCH_DISTANCE 1000
 const float MARCH_SIZE = 0.05;
 uniform sampler2D uBlueNoise;
 
 // Scene parameters
 vec3 cloudPosition = vec3(0, 0, -10);
 float cloudRadius = 2f;
+
+struct cloud {
+    vec3 position;
+    float radius;
+};
+
+cloud[5] clouds = { { vec3(0, 0, 0), 2 }, { vec3(10, 0, 0), 5 }, { vec3(60, 0, 0), 2 }, { vec3(100, 0, 0), 8 }, { vec3(30, 0, 0), 1 } };
 
 float sdSphere(vec3 p, float radius) {
 	return length(p) - radius;
@@ -66,8 +73,8 @@ float fbm(vec3 p) {
 	return f;
 }
 
-float evaluateDensityAt(vec3 p) {
-	float sphere = sdSphere(p + cloudPosition, cloudRadius);
+float evaluateDensityAt(vec3 p, cloud c) {
+	float sphere = sdSphere(p + c.position, c.radius);
 	float f = fbm(p);
 	float plane = abs(p.y + 2) + f;
 	//float atmosphere = -1 / (1 + p.y * p.y * 0.5f) * 0.01f;
@@ -128,33 +135,41 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     vec4 res = vec4(0.0);
     vec3 lightDirection = normalize(lightPosition);
 
-    float tEnter, tExit;
-    if (!intersectSphere(rayOrigin, rayDirection, cloudPosition, cloudRadius + 1, tEnter, tExit)) {
-        return res; // No intersection with the volume
-    }
     float rayDotCam = dot(rayDirection, cameraForward);
-    float startDepth = max(tEnter, 0.0);
-    float camPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
-    float t = camPlane / rayDotCam;
 
-    for (int i = 0; i < MAX_STEPS && t < tExit; i++) {
-        vec3 p = rayOrigin + rayDirection * t;
-        float density = evaluateDensityAt(p);
+    float closestHitDistanceAlongRay = 0;
 
-        if (density > 0.0) {
-            float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * lightDirection)) / 0.3, 0.0, 1.0);
-            vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
-            vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
-            color.rgb *= lin;
-            color.rgb *= color.a;
-            res += color * (1.0 - res.a);
+    for(int j = 0; j < clouds.length; j++) {
+        cloud c = clouds[j];
+
+        float tEnter, tExit;
+        if (!intersectSphere(rayOrigin, rayDirection, c.position, c.radius + 1, tEnter, tExit)) {
+            continue;
         }
 
-        if (res.a >= 0.99) {
-            break;
-        }
+        float startDepth = max(tEnter, 0.0);
+        float camPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
+        float t = camPlane / rayDotCam;
 
-        t += MARCH_SIZE;
+        for (int i = 0; i < MAX_STEPS && t < tExit; i++) {
+            vec3 p = rayOrigin + rayDirection * t;
+            float density = evaluateDensityAt(p, c);
+
+            if (density > 0.0) {
+                float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * lightDirection, c)) / 0.3, 0.0, 1.0);
+                vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
+                vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
+                color.rgb *= lin;
+                color.rgb *= color.a;
+                res += color * (1.0 - res.a);
+            }
+
+            if (res.a >= 0.99) {
+                break;
+            }
+
+            t += MARCH_SIZE;
+        }
     }
 
     return res;
