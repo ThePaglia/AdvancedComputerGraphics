@@ -23,9 +23,14 @@ const float ambientIntensity = 0.9f;
 uniform float cloudTime = 1.0f;
 
 // Raymarching
-#define MAX_STEPS 100
-const float MARCH_SIZE = 0.1;
+#define MAX_STEPS 200
+#define MAX_MARCH_DISTANCE 50
+const float MARCH_SIZE = 0.05;
 uniform sampler2D uBlueNoise;
+
+// Scene parameters
+vec3 cloudPosition = vec3(0, 0, -10);
+float cloudRadius = 2f;
 
 float sdSphere(vec3 p, float radius) {
 	return length(p) - radius;
@@ -62,12 +67,12 @@ float fbm(vec3 p) {
 }
 
 float evaluateDensityAt(vec3 p) {
-	float sphere = sdSphere(p + vec3(0, -0.5f, 0), 1.0);
+	float sphere = sdSphere(p + cloudPosition, cloudRadius);
 	float f = fbm(p);
 	float plane = abs(p.y + 2) + f;
-	float atmosphere = -1 / (1 + p.y * p.y * 0.5f) * 0.01f;
-	float density = min(min(plane, sphere + f), atmosphere);
-	return -density;
+	//float atmosphere = -1 / (1 + p.y * p.y * 0.5f) * 0.01f;
+	float density = min(plane, sphere + f);
+	return -sphere + f;
 }
 
 // Stolen from https://www.shadertoy.com/view/Ml3Gz8
@@ -90,43 +95,71 @@ float smoothmin(float a, float b, float k) {
     return mix(a, b, h) - k*h*(1.0-h);    
 }
 
-bool hitOpaque(vec3 p, out vec4 color) {
-	float noise = noise(p * vec3(1, 0, 1));
-	float plane = p.y + 4 + noise * 0.3f;
-	color = noise > 0.9 ? vec4(0, 0.3, 0.5, 1) : vec4(0.8, 0.8, 0.8, 1) * (1 - noise) + vec4(0.2, 0.5, 0.2, 1) * noise;
-	return plane < 0;
+bool intersectBox(vec3 ro, vec3 rd, vec3 boxMin, vec3 boxMax, out float tEnter, out float tExit) {
+    vec3 invDir = 1.0 / rd;
+    vec3 t0 = (boxMin - ro) * invDir;
+    vec3 t1 = (boxMax - ro) * invDir;
+
+    vec3 tMin = min(t0, t1);
+    vec3 tMax = max(t0, t1);
+
+    tEnter = max(max(tMin.x, tMin.y), tMin.z);
+    tExit  = min(min(tMax.x, tMax.y), tMax.z);
+
+    return tEnter <= tExit;
 }
 
-vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, float offset) {
-	float depth = 0.0;
-	depth += MARCH_SIZE * offset;
-	vec3 p = rayOrigin + rayDirection * depth;
-	vec4 res = vec4(0.0);
-	vec3 lightDirection = normalize(lightPosition);
+bool intersectSphere(vec3 ro, vec3 rd, vec3 sc, float sr, out float tEnter, out float tExit) {
+    vec3 oc = ro + sc;
+    float b = dot(oc, rd);
+    float c = dot(oc, oc) - sr * sr;
+    float h = b * b - c;
 
-	for(int i = 0; i < MAX_STEPS; i++) {
-		vec4 opaqueColor;
-		bool hitOpaque = hitOpaque(p, opaqueColor);
-		if(hitOpaque) {
-			return res + opaqueColor * (1.0 - res.a);
-		}
+    if (h < 0.0) return false;  // No intersection
 
-		float density = evaluateDensityAt(p);
-
-		if(density > 0.0) {
-			float diffuse = clamp((evaluateDensityAt(p) - evaluateDensityAt(p + 0.3 * lightDirection)) / 0.3, 0.0, 1.0);
-			vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
-			vec4 color = vec4(mix(vec3(1.0, 1.0, 1.0), vec3(0.0, 0.0, 0.0), density), density);
-			color.rgb *= lin;
-			color.rgb *= color.a;
-			res += color * (1.0 - res.a);
-		}
-
-		depth += MARCH_SIZE;
-		p = rayOrigin + rayDirection * depth;
-	}
-	return res;
+    h = sqrt(h);
+    tEnter = -b - h;
+    tExit  = -b + h;
+    return true;
 }
+
+
+vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
+    vec4 res = vec4(0.0);
+    vec3 lightDirection = normalize(lightPosition);
+
+    float tEnter, tExit;
+    if (!intersectSphere(rayOrigin, rayDirection, cloudPosition, cloudRadius + 1, tEnter, tExit)) {
+        return res; // No intersection with the volume
+    }
+    float rayDotCam = dot(rayDirection, cameraForward);
+    float startDepth = max(tEnter, 0.0);
+    float camPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
+    float t = camPlane / rayDotCam;
+
+    for (int i = 0; i < MAX_STEPS && t < tExit; i++) {
+        vec3 p = rayOrigin + rayDirection * t;
+        float density = evaluateDensityAt(p);
+
+        if (density > 0.0) {
+            float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * lightDirection)) / 0.3, 0.0, 1.0);
+            vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
+            vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
+            color.rgb *= lin;
+            color.rgb *= color.a;
+            res += color * (1.0 - res.a);
+        }
+
+        if (res.a >= 0.99) {
+            break;
+        }
+
+        t += MARCH_SIZE;
+    }
+
+    return res;
+}
+
 
 void main() {
 	mat3 uCameraMatrix = transpose(mat3(uCameraRight, uCameraUp, uCameraDir));
@@ -142,7 +175,7 @@ void main() {
 	vec3 color = vec3(0.0);
 	float blueNoise = texture2D(uBlueNoise, gl_FragCoord.xy / 100).r;
 	float offset = fract(blueNoise);
-	vec4 res = raymarch(rayOrigin, rayDirection, offset);
+	vec4 res = raymarch(rayOrigin, rayDirection, uCameraDir, offset);
 	color = res.rgb;
 
 	fragmentColor = vec4(color, 1.0);
