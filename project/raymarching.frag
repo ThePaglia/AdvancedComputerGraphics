@@ -26,6 +26,7 @@ uniform float cloudTime = 1.0f;
 #define MAX_STEPS 500
 #define MAX_MARCH_DISTANCE 1000
 const float MARCH_SIZE = 0.08;
+const float ATMOSPHERE_MARCH_SIZE = 100;
 uniform sampler2D uBlueNoise;
 
 // Sampling
@@ -33,11 +34,10 @@ uniform float samplingIncreaseFactor;
 uniform float samplingIncreaseDepth;
 
 // Scene parameters
-vec3 cloudPosition = vec3(0, 0, -10);
-float cloudRadius = 2f;
-float cloudHeight = 10f;
-float cloudDepth = 2f;
-float cloudBoxWidth = 200;
+const float cloudHeight = 10f;
+const float cloudDepth = 2f;
+const float cloudBoxWidth = 200;
+const float atmosphereFalloffDepth = 100;
 
 struct cloud {
     vec3 position;
@@ -154,6 +154,10 @@ float remap(float value, float inMin, float inMax, float outMin, float outMax) {
     return outMin + (value - inMin) * (outMax - outMin) / (inMax - inMin);
 }
 
+float sampleAtmosphere(vec3 p) {
+    return exp(-max(p.y, 1) / atmosphereFalloffDepth);// clamp(atmosphereFalloffDepth / max(p.y, 1), 0, 1);
+}
+
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
     vec4 res = vec4(0.0);
     float depth = offset;
@@ -166,59 +170,17 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     vec3 cloudBoxMax = vec3(cloudBoxWidth, cloudHeight + cloudDepth, cloudBoxWidth);
 
     float tEnter, tExit;
-    if(!intersectBox(rayOrigin, rayDirection, cloudBoxMin, cloudBoxMax, tEnter, tExit)) {
-        return res;
-    }
-
-    float startDepth = max(tEnter, 0.0);
-    float camAlignedPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
-    depth = camAlignedPlane / rayDotCam;  // World-space t, but camera-aligned
-    startDepth = depth;
-    
-    float depthTraveledThroughMedium = 0;
-
-    for(int i = 0; i < MAX_STEPS; i++) {
-        vec3 p = rayOrigin + rayDirection * depth;
-
-        float density = evaluateDensityAt(p);
-
-        if (density > 0.0) {
-            float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * lightDirection)) / 0.3, 0.0, 1.0);
-            vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
-            vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
-            color.rgb *= lin;
-            color.rgb *= color.a;
-            res += color * (1.0 - res.a);
-            if (res.a >= 0.99) {
-                return res;
-            }
-        }
-
-        depthTraveledThroughMedium += MARCH_SIZE;
-
-        // Samples should be taken at higher frequencies when closer to the camera, i.e. when the depth is low
-        float depthFactor = clamp(max(depth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1);
-        depth = startDepth + depthTraveledThroughMedium * samplingIncreaseFactor * depthFactor + depthTraveledThroughMedium * (1 - depthFactor);
-
-        if(depth >= tExit || depthTraveledThroughMedium > MAX_MARCH_DISTANCE)
-            break;
-    }
-
-    /*
-    for(int j = 0; j < clouds.length; j++) {
-        cloud c = clouds[j];
-
-        float tEnter, tExit;
-        if (!intersectSphere(rayOrigin, rayDirection, c.position, c.radius + 1, tEnter, tExit)) {
-            continue;
-        }
-
+    if(intersectBox(rayOrigin, rayDirection, cloudBoxMin, cloudBoxMax, tEnter, tExit) && tExit > 0) {
         float startDepth = max(tEnter, 0.0);
-        float camPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
-        float t = camPlane / rayDotCam;
+        float camAlignedPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
+        depth = camAlignedPlane / rayDotCam;  // World-space t, but camera-aligned
+        startDepth = depth;
+    
+        float depthTraveledThroughMedium = 0;
 
-        for (int i = 0; i < MAX_STEPS && t < tExit; i++) {
-            vec3 p = rayOrigin + rayDirection * t;
+        for(int i = 0; i < MAX_STEPS; i++) {
+            vec3 p = rayOrigin + rayDirection * depth;
+
             float density = evaluateDensityAt(p);
 
             if (density > 0.0) {
@@ -228,16 +190,32 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 color.rgb *= lin;
                 color.rgb *= color.a;
                 res += color * (1.0 - res.a);
+                if (res.a >= 0.99) {
+                    break;
+                }
             }
 
-            if (res.a >= 0.99) {
+            depthTraveledThroughMedium += MARCH_SIZE;
+
+            // Samples should be taken at higher frequencies when closer to the camera, i.e. when the depth is low
+            float depthFactor = clamp(max(depth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1);
+            depth = startDepth + depthTraveledThroughMedium * samplingIncreaseFactor * depthFactor + depthTraveledThroughMedium * (1 - depthFactor);
+
+            if(depth >= tExit || depthTraveledThroughMedium > MAX_MARCH_DISTANCE)
                 break;
-            }
-
-            t += MARCH_SIZE;
         }
+    } else {
     }
-    */
+
+    int numAtmosphereSamples = 100;
+    for (int i = 0; i < numAtmosphereSamples; i++) {
+        vec3 p = rayOrigin + rayDirection * i * ATMOSPHERE_MARCH_SIZE;
+        float density = sampleAtmosphere(p);
+        vec4 color = vec4(density);
+        color.rgb *= ambientColor * ambientIntensity;
+        color.rgb *= color.a;
+        res += color * (1.0 - res.a);
+    }
 
     return res;
 }
