@@ -32,6 +32,7 @@ uniform sampler2D uBlueNoise;
 // Sampling
 uniform float samplingIncreaseFactor;
 uniform float samplingIncreaseDepth;
+uniform float samplingFalloffDistance;
 
 // Scene parameters
 const float cloudHeight = 10f;
@@ -155,7 +156,7 @@ float remap(float value, float inMin, float inMax, float outMin, float outMax) {
 }
 
 float sampleAtmosphere(vec3 p) {
-    return exp(-max(p.y, 1) / atmosphereFalloffDepth);// clamp(atmosphereFalloffDepth / max(p.y, 1), 0, 1);
+    return exp(-max(p.y, 1) / atmosphereFalloffDepth);
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
@@ -165,6 +166,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
     float rayDotCam = dot(rayDirection, cameraForward);
     float rayDotCloudPlane = dot(rayDirection, normalize(rayDirection * vec3(1, 0, 1)));
+    float distCamCloudPlane = abs(rayOrigin.y - cloudHeight);
 
     vec3 cloudBoxMin = vec3(-cloudBoxWidth, cloudHeight - cloudDepth, -cloudBoxWidth);
     vec3 cloudBoxMax = vec3(cloudBoxWidth, cloudHeight + cloudDepth, cloudBoxWidth);
@@ -198,16 +200,15 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             depthTraveledThroughMedium += MARCH_SIZE;
 
             // Samples should be taken at higher frequencies when closer to the camera, i.e. when the depth is low
-            float depthFactor = clamp(max(depth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1);
-            depth = startDepth + depthTraveledThroughMedium * samplingIncreaseFactor * depthFactor + depthTraveledThroughMedium * (1 - depthFactor);
+            float depthFactor = clamp(max(depth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1) * clamp(samplingFalloffDistance / max(distCamCloudPlane, 1), 0, 1);
+            depth = startDepth + depthTraveledThroughMedium * (samplingIncreaseFactor * depthFactor  + 1);
 
             if(depth >= tExit || depthTraveledThroughMedium > MAX_MARCH_DISTANCE)
                 break;
         }
-    } else {
     }
 
-    int numAtmosphereSamples = 100;
+    int numAtmosphereSamples = 2;
     for (int i = 0; i < numAtmosphereSamples; i++) {
         vec3 p = rayOrigin + rayDirection * i * ATMOSPHERE_MARCH_SIZE;
         float density = sampleAtmosphere(p);
