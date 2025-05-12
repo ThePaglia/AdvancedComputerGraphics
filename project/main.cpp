@@ -53,6 +53,8 @@ vec3 lightPosition = vec3(0.0f, 1.0f, 0.0f);
 vec3 pointLightColor = vec3(1.0f, 0.6f, 0.3f);
 
 // Cloud parameters
+float samplingIncreaseFactor = 20.0f;
+float samplingIncreaseDepth = 5.0f;
 float cloudMovementSpeed = 0.1f;
 float cloudTime = 0.0f;
 
@@ -125,6 +127,8 @@ void drawScene(GLuint currentShaderProgram,
 	// uTime
 	labhelper::setUniformSlow(currentShaderProgram, "uTime", currentTime);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudTime", cloudTime);
+	labhelper::setUniformSlow(currentShaderProgram, "samplingIncreaseFactor", samplingIncreaseFactor);
+	labhelper::setUniformSlow(currentShaderProgram, "samplingIncreaseDepth", samplingIncreaseDepth);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
@@ -279,7 +283,12 @@ void gui()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
 		ImGui::GetIO().Framerate);
 	// ----------------------------------------------------------
-	ImGui::SliderFloat("Cloud speed", &cloudMovementSpeed, 0.0f, 1.0f);
+	ImGui::Text("Simulation");
+	ImGui::SliderFloat("Cloud Speed", &cloudMovementSpeed, 0.0f, 1.0f);
+	ImGui::SliderFloat("Sampling Factor", &samplingIncreaseFactor, 1.0f, 100.0f);
+	ImGui::SliderFloat("Sampling Depth", &samplingIncreaseDepth, 0.0f, 100.0f);
+	ImGui::Text("Controls");
+	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
 	labhelper::perf::drawEventsWindow();
 }
 
