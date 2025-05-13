@@ -36,9 +36,17 @@ uniform float samplingFalloffDistance;
 
 // Scene parameters
 const float cloudHeight = 10f;
-const float cloudDepth = 2f;
 const float cloudBoxWidth = 200;
 const float atmosphereFalloffDepth = 100;
+
+// Planet parameters
+uniform vec3 planetOrigin = vec3(0, 0, -20);
+uniform float planetRadius = 10f;
+uniform float cloudlessDepth = 0.5f;
+uniform float cloudDepth = 1f;
+uniform float cloudScale = 1.0f;
+uniform float cloudStepMin = 0.1f;
+uniform float cloudStepMax = 0.8f;
 
 struct cloud {
     vec3 position;
@@ -83,25 +91,41 @@ float fbm(vec3 p) {
 
 // Constructs a unified min from the list of clouds
 float evaluateDensityAt(vec3 p) {
-    float f = fbm(p);
+    float f = fbm(p * 3);
 
-    float topHeight = cloudHeight + cloudDepth;
+    float cloudBelt = min(-p.y - (-cloudHeight) + cloudDepth / 2, p.y + (-cloudHeight) + cloudDepth / 2) + f;
+    
+    float outer = sdSphere(p + planetOrigin, planetRadius + cloudlessDepth + cloudDepth);
+    float inner = -sdSphere(p + planetOrigin, planetRadius + cloudlessDepth); // cloudDepth = shell thickness
 
-    // Smooth bell-shaped falloff between baseHeight and topHeight
-    float verticalFade = smoothstep(cloudHeight, cloudHeight + cloudDepth * 0.5, p.y)
-                       * (1.0 - smoothstep(cloudHeight + cloudDepth * 0.5, topHeight, p.y));
+    float shell = max(outer, inner); // Hollow region
+    float shellDensity = -shell;
 
-    return min(-p.y - (-cloudHeight) + cloudDepth / 2, p.y + (-cloudHeight) + cloudDepth / 2) + f;
+    // Large-scale holes
+    float largeHoleNoise = fbm(p * cloudScale); // lower frequency = larger features
+    float holeMask = smoothstep(cloudStepMin, cloudStepMax, largeHoleNoise); // controls size/sharpness of holes
+
+    return shellDensity * holeMask;
 }
 
 float sdf(vec3 p) {
-    float dist = 1000;
-    for (int i = 0; i < clouds.length; i++) {
-        cloud c = clouds[i];
-        dist = min(dist, sdSphere(p + c.position, c.radius + 1));
-    }
-    return dist;
+    float sphere = sdSphere(p + planetOrigin, planetRadius);
+    return sphere;
 }
+
+vec3 calculateNormal(in vec3 p)
+{
+    const vec3 small_step = vec3(0.001, 0.0, 0.0);
+
+    float gradient_x = sdf(p + small_step.xyy) - sdf(p - small_step.xyy);
+    float gradient_y = sdf(p + small_step.yxy) - sdf(p - small_step.yxy);
+    float gradient_z = sdf(p + small_step.yyx) - sdf(p - small_step.yyx);
+
+    vec3 normal = vec3(gradient_x, gradient_y, gradient_z);
+
+    return normalize(normal);
+}
+
 
 // Stolen from https://www.shadertoy.com/view/Ml3Gz8
 float smoothmin(float a, float b, float k) {
@@ -160,27 +184,51 @@ float sampleAtmosphere(vec3 p) {
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
-    vec4 res = vec4(0.0);
-    float depth = offset;
     vec3 lightDirection = normalize(lightPosition);
 
     float rayDotCam = dot(rayDirection, cameraForward);
     float rayDotCloudPlane = dot(rayDirection, normalize(rayDirection * vec3(1, 0, 1)));
     float distCamCloudPlane = abs(rayOrigin.y - cloudHeight);
 
+    float opaqueDepth = 0;
+    vec4 opaqueRes = vec4(0.0);
+
+    for(int i = 0; i < MAX_STEPS; i++) {
+        vec3 p = rayOrigin + rayDirection * opaqueDepth;
+        float distanceToWorld = sdf(p);
+
+        if(distanceToWorld <= 0.01f) {
+            vec3 normal = calculateNormal(p);
+            float diffuseIntensity = clamp(dot(lightDirection, normal), 0, 1);
+            opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.2f, 1.0f, 0.6f, 1.0f), diffuseIntensity);
+            opaqueRes.rgb *= pointLightColor * pointLightIntensityMultiplier;
+            opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
+            break;
+        }
+
+        opaqueDepth += distanceToWorld;
+
+        if(opaqueDepth > MAX_MARCH_DISTANCE) {
+            break;
+        }
+    }
+
     vec3 cloudBoxMin = vec3(-cloudBoxWidth, cloudHeight - cloudDepth, -cloudBoxWidth);
     vec3 cloudBoxMax = vec3(cloudBoxWidth, cloudHeight + cloudDepth, cloudBoxWidth);
 
+    float depth = 0;
+    vec4 volumetricRes = vec4(0.0);
     float tEnter, tExit;
-    if(intersectBox(rayOrigin, rayDirection, cloudBoxMin, cloudBoxMax, tEnter, tExit) && tExit > 0) {
+    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnter, tExit) && tExit > 0) {
         float startDepth = max(tEnter, 0.0);
         float camAlignedPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
-        depth = camAlignedPlane / rayDotCam;  // World-space t, but camera-aligned
+        depth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
         startDepth = depth;
     
         float depthTraveledThroughMedium = 0;
 
         for(int i = 0; i < MAX_STEPS; i++) {
+
             vec3 p = rayOrigin + rayDirection * depth;
 
             float density = evaluateDensityAt(p);
@@ -191,8 +239,8 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
                 color.rgb *= lin;
                 color.rgb *= color.a;
-                res += color * (1.0 - res.a);
-                if (res.a >= 0.99) {
+                volumetricRes += color * (1.0 - volumetricRes.a);
+                if (volumetricRes.a >= 0.99) {
                     break;
                 }
             }
@@ -203,10 +251,12 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             float depthFactor = clamp(max(depth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1) * clamp(samplingFalloffDistance / max(distCamCloudPlane, 1), 0, 1);
             depth = startDepth + depthTraveledThroughMedium * (samplingIncreaseFactor * depthFactor  + 1);
 
-            if(depth >= tExit || depthTraveledThroughMedium > MAX_MARCH_DISTANCE)
+            if(depth >= tExit || depthTraveledThroughMedium > MAX_MARCH_DISTANCE || depth > opaqueDepth)
                 break;
         }
     }
+
+    vec4 res = mix(opaqueRes, volumetricRes, volumetricRes.a);
 
     int numAtmosphereSamples = 2;
     for (int i = 0; i < numAtmosphereSamples; i++) {
@@ -215,7 +265,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         vec4 color = vec4(density);
         color.rgb *= ambientColor * ambientIntensity;
         color.rgb *= color.a;
-        res += color * (1.0 - res.a);
+        //res += color * (1.0 - res.a);
     }
 
     return res;

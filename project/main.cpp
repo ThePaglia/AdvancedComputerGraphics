@@ -57,9 +57,15 @@ float samplingIncreaseFactor = 20.0f;
 float samplingIncreaseDepth = 5.0f;
 float samplingFalloffDistance = 10.0f;
 
-// Cloud parameters
+// Scene parameters
 float cloudMovementSpeed = 0.1f;
 float cloudTime = 0.0f;
+float planetRadius = 10.0f;
+float cloudlessDepth = 0.5f;
+float cloudDepth = 1.3f;
+float cloudScale = 0.72f;
+float cloudStepMin = 0.01f;
+float cloudStepMax = 0.46f;
 
 float pointLightIntensityMultiplier = 0.8f;
 
@@ -127,9 +133,16 @@ void drawScene(GLuint currentShaderProgram,
 		pointLightIntensityMultiplier);
 	labhelper::setUniformSlow(currentShaderProgram, "lightPosition", lightPosition);
 
-	// uTime
+	// Simulation parameters
 	labhelper::setUniformSlow(currentShaderProgram, "uTime", currentTime);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudTime", cloudTime);
+	labhelper::setUniformSlow(currentShaderProgram, "planetRadius", planetRadius);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudlessDepth", cloudlessDepth);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudDepth", cloudDepth);
+	labhelper::setUniformSlow(currentShaderProgram, "samplingFalloffDistance", samplingFalloffDistance);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudScale", cloudScale);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudStepMin", cloudStepMin);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudStepMax", cloudStepMax);
 
 	// Sampling
 	labhelper::setUniformSlow(currentShaderProgram, "samplingIncreaseFactor", samplingIncreaseFactor);
@@ -294,6 +307,12 @@ void gui()
 	ImGui::SliderFloat("Sampling Factor", &samplingIncreaseFactor, 1.0f, 100.0f);
 	ImGui::SliderFloat("Sampling Depth", &samplingIncreaseDepth, 0.0f, 100.0f);
 	ImGui::SliderFloat("Sampling Falloff", &samplingFalloffDistance, 0.1f, 100.0f);
+	ImGui::SliderFloat("Planet Radius", &planetRadius, 1, 100.0f);
+	ImGui::SliderFloat("Cloudless Depth", &cloudlessDepth, 0.1f, 10);
+	ImGui::SliderFloat("Cloud Depth", &cloudDepth, 0.1f, 10);
+	ImGui::SliderFloat("Cloud Scale", &cloudScale, 0.1f, 10);
+	ImGui::SliderFloat("Cloud Step Min", &cloudStepMin, 0, 1);
+	ImGui::SliderFloat("Cloud Step Max", &cloudStepMax, 0, 1);
 	ImGui::Text("Controls");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
 	labhelper::perf::drawEventsWindow();
