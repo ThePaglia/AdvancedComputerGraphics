@@ -40,13 +40,19 @@ const float cloudBoxWidth = 200;
 const float atmosphereFalloffDepth = 100;
 
 // Planet parameters
-uniform vec3 planetOrigin = vec3(0, 0, -20);
+uniform vec3 planetOrigin = vec3(0, 0, 0);
 uniform float planetRadius = 10f;
 uniform float cloudlessDepth = 0.5f;
 uniform float cloudDepth = 1f;
 uniform float cloudScale = 1.0f;
+uniform float atmosphereDepth = 3f;
 uniform float cloudStepMin = 0.1f;
 uniform float cloudStepMax = 0.8f;
+uniform float atmosphereDensityFalloff = 2f;
+
+// Precalculated constants
+const float atmosphereRadius = planetRadius + atmosphereDepth;
+const vec3 sunDirection = normalize(lightPosition);
 
 struct cloud {
     vec3 position;
@@ -95,8 +101,8 @@ float evaluateDensityAt(vec3 p) {
 
     float cloudBelt = min(-p.y - (-cloudHeight) + cloudDepth / 2, p.y + (-cloudHeight) + cloudDepth / 2) + f;
     
-    float outer = sdSphere(p + planetOrigin, planetRadius + cloudlessDepth + cloudDepth);
-    float inner = -sdSphere(p + planetOrigin, planetRadius + cloudlessDepth); // cloudDepth = shell thickness
+    float outer = sdSphere(p - planetOrigin, planetRadius + cloudlessDepth + cloudDepth);
+    float inner = -sdSphere(p - planetOrigin, planetRadius + cloudlessDepth); // cloudDepth = shell thickness
 
     float shell = max(outer, inner); // Hollow region
     float shellDensity = -shell;
@@ -109,7 +115,7 @@ float evaluateDensityAt(vec3 p) {
 }
 
 float sdf(vec3 p) {
-    float sphere = sdSphere(p + planetOrigin, planetRadius);
+    float sphere = sdSphere(p - planetOrigin, planetRadius);
     return sphere;
 }
 
@@ -202,9 +208,70 @@ bool raymarchSDF(vec3 rayOrigin, vec3 rayDirection, int maxSteps, float maxDepth
     return false;
 }
 
-vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
-    vec3 lightDirection = normalize(lightPosition);
+// Atmospheric density has an exponential falloff the higher we get from the surface
+float atmosphereDensityAtPoint(vec3 p) {
+    float heightAboveSurface = sdSphere(p - planetOrigin, planetRadius);
+    // normalized height from 1 at the edge of the atmosphere shell to 0 at the surface
+    float normalizedHeight = heightAboveSurface / atmosphereDepth;
+    // Multiplying by (1 - normalizedHeight) is a bit dirty but ensures that the density is 0 at the edge of the atmosphere shell
+    float density = exp(-normalizedHeight * atmosphereDensityFalloff) * (1 - normalizedHeight);
+    return density;
+}
 
+float numOpticalDepthPoints = 10;
+float atmosphereOpticalDepth(vec3 rayOrigin, vec3 rayDirection, float rayLength) {
+    float stepSize = rayLength / (numOpticalDepthPoints - 1);
+    float opticalDepth = 0.0f;
+    
+    float marchDepth = 0.0;
+
+    // March through the atmosphere along the ray length and accumulate density
+    for(int i = 0; i < numOpticalDepthPoints; i++) {
+        vec3 p = rayOrigin + rayDirection * marchDepth;
+
+        float density = atmosphereDensityAtPoint(p);
+        opticalDepth += density * stepSize;
+        marchDepth += stepSize;
+    }
+
+    return opticalDepth;
+}
+
+float numInscatteringPoints = 10;
+float calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength) {
+    float stepSize = rayLength / (numInscatteringPoints - 1);
+    float inScatteredLight = 0.0f;
+
+    float marchDepth = 0.0;
+
+    for(int i = 0; i < numInscatteringPoints; i++) {
+        vec3 p = rayOrigin + rayDirection * marchDepth;
+        // The distance of the sun ray, i.e. the ray that travels from p through the atmosphere towards the sun, is the same as tExit
+        float tEnter, sunRayLength;
+        // We are guaranteed to intersect the atmosphere sphere as we start the ray inside of it, we can therefore use this function to get sunRayLength
+        intersectSphere(p, sunDirection, planetOrigin, atmosphereRadius, tEnter, sunRayLength);
+        
+        // The accumulated amount of light (density) from the point towards the sun
+        float sunRayOpticalDepth = atmosphereOpticalDepth(p, sunDirection, sunRayLength);
+        // The accumulated amount of light (density) from the point back towards the camera
+        float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, marchDepth);
+
+        // The light that reaches the camera has an exponential falloff
+        float transmittance = exp(-(sunRayOpticalDepth + viewRayOpticalDepth));
+        
+        // Sample the density at this inscatter point
+        float density = atmosphereDensityAtPoint(p);
+
+        // Accumulate the density multiplied by the transmittance at this point, i.e. the amount of light that reaches this point and is transmitted towards the camera 
+        inScatteredLight += density * transmittance * stepSize;
+
+        marchDepth += stepSize;
+    }
+
+    return inScatteredLight;
+}
+
+vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
     float rayDotCam = dot(rayDirection, cameraForward);
     float rayDotCloudPlane = dot(rayDirection, normalize(rayDirection * vec3(1, 0, 1)));
     float distCamCloudPlane = abs(rayOrigin.y - cloudHeight);
@@ -215,7 +282,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     vec3 opaquePoint = vec3(0);
     if(raymarchSDF(rayOrigin, rayDirection, MAX_STEPS, MAX_MARCH_DISTANCE, opaqueDepth, opaquePoint)) {
         vec3 normal = calculateNormal(opaquePoint);
-        float diffuseIntensity = clamp(dot(lightDirection, normal), 0, 1);
+        float diffuseIntensity = clamp(dot(sunDirection, normal), 0, 1);
         opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.01f, 0.2f, 1.0f, 1.0f), diffuseIntensity);
         opaqueRes.rgb *= pointLightColor * pointLightIntensityMultiplier;
         opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
@@ -224,20 +291,20 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     vec3 cloudBoxMin = vec3(-cloudBoxWidth, cloudHeight - cloudDepth, -cloudBoxWidth);
     vec3 cloudBoxMax = vec3(cloudBoxWidth, cloudHeight + cloudDepth, cloudBoxWidth);
 
-    float depth = 0;
+    float volumetricDepth = 0;
     vec4 volumetricRes = vec4(0.0);
     float tEnter, tExit;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnter, tExit) && tExit > 0) {
         float startDepth = max(tEnter, 0.0);
         float camAlignedPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
-        depth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
-        startDepth = depth;
+        volumetricDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
+        startDepth = volumetricDepth;
     
         float depthTraveledThroughMedium = 0;
 
         for(int i = 0; i < MAX_STEPS; i++) {
 
-            vec3 p = rayOrigin + rayDirection * depth;
+            vec3 p = rayOrigin + rayDirection * volumetricDepth;
 
             float density = evaluateDensityAt(p);
 
@@ -246,11 +313,12 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 float ent, ext;
 
                 // Hacky way of determining if a cloud is in shadow, should be updated to be physically correct in the future
-                if(intersectSphere(p, lightDirection, planetOrigin, planetRadius, ent, ext) && ext > 0) {
+                // Also only "works" with a perfectly spherical planet
+                if(intersectSphere(p, sunDirection, planetOrigin, planetRadius, ent, ext) && ext > 0) {
                     shadowMultiplier = 1 - max((ext - ent) / 10, 0);
                 }
 
-                float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * lightDirection)) / 0.3, 0.0, 1.0);
+                float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection)) / 0.3, 0.0, 1.0);
                 vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
                 color.rgb *= lin;
@@ -265,29 +333,28 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             depthTraveledThroughMedium += MARCH_SIZE;
 
             // Samples should be taken at higher frequencies when closer to the camera, i.e. when the depth is low
-            float depthFactor = clamp(max(depth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1) * clamp(samplingFalloffDistance / max(distCamCloudPlane, 1), 0, 1);
-            depth = startDepth + depthTraveledThroughMedium * (samplingIncreaseFactor * depthFactor  + 1);
+            float depthFactor = clamp(max(volumetricDepth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1) * clamp(samplingFalloffDistance / max(distCamCloudPlane, 1), 0, 1);
+            volumetricDepth = startDepth + depthTraveledThroughMedium * (samplingIncreaseFactor * depthFactor  + 1);
 
-            if(depth >= tExit || depthTraveledThroughMedium > MAX_MARCH_DISTANCE || depth > opaqueDepth)
+            if(volumetricDepth >= tExit || depthTraveledThroughMedium > MAX_MARCH_DISTANCE || volumetricDepth > opaqueDepth)
                 break;
         }
     }
 
     vec4 res = mix(opaqueRes, volumetricRes, volumetricRes.a);
 
-    int numAtmosphereSamples = 2;
-    for (int i = 0; i < numAtmosphereSamples; i++) {
-        vec3 p = rayOrigin + rayDirection * i * ATMOSPHERE_MARCH_SIZE;
-        float density = sampleAtmosphere(p);
-        vec4 color = vec4(density);
-        color.rgb *= ambientColor * ambientIntensity;
-        color.rgb *= color.a;
-        //res += color * (1.0 - res.a);
+    float atmosphereLight = 0.0f;
+    float atmosphereRadius = planetRadius + atmosphereDepth;
+    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnter, tExit) && tExit > 0) {
+        vec3 p = rayOrigin + rayDirection * max(tEnter, 0);
+        float distanceThroughAtmosphere = min(tExit, opaqueDepth) - max(tEnter, 0);
+        atmosphereLight = calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere);
     }
+
+    res = res * (1 - atmosphereLight) + atmosphereLight;
 
     return res;
 }
-
 
 void main() {
 	mat3 uCameraMatrix = transpose(mat3(uCameraRight, uCameraUp, uCameraDir));

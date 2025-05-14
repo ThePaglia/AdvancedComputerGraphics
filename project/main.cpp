@@ -38,7 +38,7 @@ GLuint raymarchingProgram;
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
-vec3 cameraPosition(0.0f, 0.0f, -5.0f);
+vec3 cameraPosition(0.0f, 0.0f, -30);
 vec3 cameraDirection = normalize(vec3(0.0f) + cameraPosition);
 vec3 cameraRight = cross(cameraDirection, worldUp);
 vec3 cameraUp = cross(cameraRight, cameraDirection);
@@ -66,6 +66,9 @@ float cloudDepth = 1.3f;
 float cloudScale = 0.72f;
 float cloudStepMin = 0.01f;
 float cloudStepMax = 0.46f;
+float atmosphereDepth = 5.6f;
+float atmosphereDensityFalloff = 5.5f;
+
 
 float pointLightIntensityMultiplier = 0.8f;
 
@@ -143,6 +146,8 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "cloudScale", cloudScale);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudStepMin", cloudStepMin);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudStepMax", cloudStepMax);
+	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDepth", atmosphereDepth);
+	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDensityFalloff", atmosphereDensityFalloff);
 
 	// Sampling
 	labhelper::setUniformSlow(currentShaderProgram, "samplingIncreaseFactor", samplingIncreaseFactor);
@@ -313,6 +318,8 @@ void gui()
 	ImGui::SliderFloat("Cloud Scale", &cloudScale, 0.1f, 10);
 	ImGui::SliderFloat("Cloud Step Min", &cloudStepMin, 0, 1);
 	ImGui::SliderFloat("Cloud Step Max", &cloudStepMax, 0, 1);
+	ImGui::SliderFloat("Atmosphere Depth", &atmosphereDepth, 0, 10);
+	ImGui::SliderFloat("Atmosphere Density Falloff", &atmosphereDensityFalloff, 0, 10);
 	ImGui::Text("Controls");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
 	labhelper::perf::drawEventsWindow();
