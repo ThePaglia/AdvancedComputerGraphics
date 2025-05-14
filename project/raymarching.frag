@@ -294,6 +294,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
     vec3 cloudBoxMin = vec3(-cloudBoxWidth, cloudHeight - cloudDepth, -cloudBoxWidth);
     vec3 cloudBoxMax = vec3(cloudBoxWidth, cloudHeight + cloudDepth, cloudBoxWidth);
+    vec3 closestPointToSunOnAtmosphereShell = planetOrigin + sunDirection * atmosphereRadius;
 
     float volumetricDepth = 0;
     vec4 volumetricRes = vec4(0.0);
@@ -322,6 +323,10 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                     shadowMultiplier = 1 - max((ext - ent) / 10, 0);
                 }
 
+                // Scale cloud lighting by how far away it is from the closest point on the atmosphere shell, 
+                // hacky and not (even close to) a physically correct way of achieving darker clouds at the far end of the planet
+                shadowMultiplier *= 1 - distance(closestPointToSunOnAtmosphereShell, p) / (atmosphereRadius * 2);
+
                 float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection)) / 0.3, 0.0, 1.0);
                 vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
@@ -347,12 +352,14 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
     vec4 res = mix(opaqueRes, volumetricRes, volumetricRes.a);
 
+    // Right now the atmosphere is rendered on top of the clouds as their depth cannot be used to cut off the distanceThroughAtmosphere
+    // Perhaps some clever compositing can save us here?
     vec4 atmosphereLight = vec4(0.0f);
     float atmosphereRadius = planetRadius + atmosphereDepth;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnter, tExit) && tExit > 0) {
         vec3 p = rayOrigin + rayDirection * max(tEnter, 0);
         float distanceThroughAtmosphere = min(tExit, opaqueDepth) - max(tEnter, 0);
-        atmosphereLight = vec4(calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere), 0 );
+        atmosphereLight = vec4(calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere), 0);
     }
 
     res = res * (1 - atmosphereLight) + atmosphereLight;
