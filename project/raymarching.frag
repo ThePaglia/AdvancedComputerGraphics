@@ -183,6 +183,25 @@ float sampleAtmosphere(vec3 p) {
     return exp(-max(p.y, 1) / atmosphereFalloffDepth);
 }
 
+bool raymarchSDF(vec3 rayOrigin, vec3 rayDirection, int maxSteps, float maxDepth, out float depth, out vec3 point) {
+    for(int i = 0; i < maxSteps; i++) {
+        point = rayOrigin + rayDirection * depth;
+        float distanceToWorld = sdf(point);
+
+        if(distanceToWorld <= 0.01f) {
+            return true;    
+        }
+
+        depth += distanceToWorld;
+
+        if(depth > maxDepth) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
     vec3 lightDirection = normalize(lightPosition);
 
@@ -190,27 +209,16 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     float rayDotCloudPlane = dot(rayDirection, normalize(rayDirection * vec3(1, 0, 1)));
     float distCamCloudPlane = abs(rayOrigin.y - cloudHeight);
 
-    float opaqueDepth = 0;
     vec4 opaqueRes = vec4(0.0);
 
-    for(int i = 0; i < MAX_STEPS; i++) {
-        vec3 p = rayOrigin + rayDirection * opaqueDepth;
-        float distanceToWorld = sdf(p);
-
-        if(distanceToWorld <= 0.01f) {
-            vec3 normal = calculateNormal(p);
-            float diffuseIntensity = clamp(dot(lightDirection, normal), 0, 1);
-            opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.2f, 1.0f, 0.6f, 1.0f), diffuseIntensity);
-            opaqueRes.rgb *= pointLightColor * pointLightIntensityMultiplier;
-            opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
-            break;
-        }
-
-        opaqueDepth += distanceToWorld;
-
-        if(opaqueDepth > MAX_MARCH_DISTANCE) {
-            break;
-        }
+    float opaqueDepth = 0;
+    vec3 opaquePoint = vec3(0);
+    if(raymarchSDF(rayOrigin, rayDirection, MAX_STEPS, MAX_MARCH_DISTANCE, opaqueDepth, opaquePoint)) {
+        vec3 normal = calculateNormal(opaquePoint);
+        float diffuseIntensity = clamp(dot(lightDirection, normal), 0, 1);
+        opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.01f, 0.2f, 1.0f, 1.0f), diffuseIntensity);
+        opaqueRes.rgb *= pointLightColor * pointLightIntensityMultiplier;
+        opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
     }
 
     vec3 cloudBoxMin = vec3(-cloudBoxWidth, cloudHeight - cloudDepth, -cloudBoxWidth);
@@ -234,11 +242,20 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             float density = evaluateDensityAt(p);
 
             if (density > 0.0) {
+                float shadowMultiplier = 1;
+                float ent, ext;
+
+                // Hacky way of determining if a cloud is in shadow, should be updated to be physically correct in the future
+                if(intersectSphere(p, lightDirection, planetOrigin, planetRadius, ent, ext) && ext > 0) {
+                    shadowMultiplier = 1 - max((ext - ent) / 10, 0);
+                }
+
                 float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * lightDirection)) / 0.3, 0.0, 1.0);
                 vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
                 color.rgb *= lin;
                 color.rgb *= color.a;
+                color.rgb *= shadowMultiplier;
                 volumetricRes += color * (1.0 - volumetricRes.a);
                 if (volumetricRes.a >= 0.99) {
                     break;
