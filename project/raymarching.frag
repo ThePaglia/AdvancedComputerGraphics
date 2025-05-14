@@ -52,7 +52,7 @@ uniform float atmosphereDensityFalloff = 2f;
 
 // Precalculated constants
 const float atmosphereRadius = planetRadius + atmosphereDepth;
-const vec3 sunDirection = normalize(lightPosition);
+vec3 sunDirection = normalize(lightPosition);
 
 struct cloud {
     vec3 position;
@@ -357,6 +357,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 }
 
 void main() {
+    sunDirection = normalize(lightPosition);
 	mat3 uCameraMatrix = transpose(mat3(uCameraRight, uCameraUp, uCameraDir));
 	vec2 uv = gl_FragCoord.xy / uResolution.xy;
 	uv -= 0.5;

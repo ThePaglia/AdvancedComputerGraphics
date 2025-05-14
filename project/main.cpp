@@ -320,6 +320,7 @@ void gui()
 	ImGui::SliderFloat("Cloud Step Max", &cloudStepMax, 0, 1);
 	ImGui::SliderFloat("Atmosphere Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Atmosphere Density Falloff", &atmosphereDensityFalloff, 0, 10);
+	ImGui::SliderFloat3("Sun Position", (float*)&lightPosition, -10, 10);
 	ImGui::Text("Controls");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
 	labhelper::perf::drawEventsWindow();
