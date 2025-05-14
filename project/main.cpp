@@ -69,7 +69,7 @@ float cloudStepMax = 0.46f;
 float atmosphereDepth = 5.6f;
 float atmosphereDensityFalloff = 5.5f;
 vec3 colorBandWavelengths = vec3(700, 530, 440);
-float atmosphereScatteringStrength = 4.0f;
+float atmosphereScatteringStrength = 3.0f;
 
 float pointLightIntensityMultiplier = 0.8f;
 
