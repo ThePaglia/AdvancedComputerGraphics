@@ -254,6 +254,8 @@ float calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLengt
         // The accumulated amount of light (density) from the point towards the sun
         float sunRayOpticalDepth = atmosphereOpticalDepth(p, sunDirection, sunRayLength);
         // The accumulated amount of light (density) from the point back towards the camera
+        // NOTE: this variable creates a somewhat noticeable ring of darkness right around the planet as this is where a ray travels the furthest through the atmosphere, 
+        //      this behaviour seems to me to be physically correct but the result is somewhat strange
         float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, marchDepth);
 
         // The light that reaches the camera has an exponential falloff
