@@ -49,6 +49,7 @@ uniform float atmosphereDepth = 3f;
 uniform float cloudStepMin = 0.1f;
 uniform float cloudStepMax = 0.8f;
 uniform float atmosphereDensityFalloff = 2f;
+uniform vec3 atmosphereScatteringCoefficients = vec3(0, 0, 0);
 
 // Precalculated constants
 const float atmosphereRadius = planetRadius + atmosphereDepth;
@@ -238,9 +239,9 @@ float atmosphereOpticalDepth(vec3 rayOrigin, vec3 rayDirection, float rayLength)
 }
 
 float numInscatteringPoints = 10;
-float calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength) {
+vec3 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength) {
     float stepSize = rayLength / (numInscatteringPoints - 1);
-    float inScatteredLight = 0.0f;
+    vec3 inScatteredLight = vec3(0.0);
 
     float marchDepth = 0.0;
 
@@ -255,17 +256,18 @@ float calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLengt
         float sunRayOpticalDepth = atmosphereOpticalDepth(p, sunDirection, sunRayLength);
         // The accumulated amount of light (density) from the point back towards the camera
         // NOTE: this variable creates a somewhat noticeable ring of darkness right around the planet as this is where a ray travels the furthest through the atmosphere, 
-        //      this behaviour seems to me to be physically correct but the result is somewhat strange
+        // this behaviour seems to me to be physically correct but the result is somewhat strange
+        // It also seems to lead to a prononciation of the atmosphere's color bands
         float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, marchDepth);
 
         // The light that reaches the camera has an exponential falloff
-        float transmittance = exp(-(sunRayOpticalDepth + viewRayOpticalDepth));
+        vec3 transmittance = exp(-(sunRayOpticalDepth + viewRayOpticalDepth) * atmosphereScatteringCoefficients);
         
         // Sample the density at this inscatter point
         float density = atmosphereDensityAtPoint(p);
 
         // Accumulate the density multiplied by the transmittance at this point, i.e. the amount of light that reaches this point and is transmitted towards the camera 
-        inScatteredLight += density * transmittance * stepSize;
+        inScatteredLight += density * transmittance * atmosphereScatteringCoefficients * stepSize;
 
         marchDepth += stepSize;
     }
@@ -345,12 +347,12 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
     vec4 res = mix(opaqueRes, volumetricRes, volumetricRes.a);
 
-    float atmosphereLight = 0.0f;
+    vec4 atmosphereLight = vec4(0.0f);
     float atmosphereRadius = planetRadius + atmosphereDepth;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnter, tExit) && tExit > 0) {
         vec3 p = rayOrigin + rayDirection * max(tEnter, 0);
         float distanceThroughAtmosphere = min(tExit, opaqueDepth) - max(tEnter, 0);
-        atmosphereLight = calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere);
+        atmosphereLight = vec4(calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere), 0 );
     }
 
     res = res * (1 - atmosphereLight) + atmosphereLight;
