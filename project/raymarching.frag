@@ -239,6 +239,7 @@ vec3 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
         
         // The accumulated amount of light (density) from the point towards the sun
         float sunRayOpticalDepth = atmosphereOpticalDepth(p, sunDirection, sunRayLength);
+        
         // The accumulated amount of light (density) from the point back towards the camera
         // NOTE: this variable creates a somewhat noticeable ring of darkness right around the planet as this is where a ray travels the furthest through the atmosphere, 
         // this behaviour seems to me to be physically correct but the result is somewhat strange
@@ -260,64 +261,43 @@ vec3 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
     return inScatteredLight;
 }
 
-vec4 calculateIncomingLight(vec3 rayOrigin, vec3 rayDirection, float rayDotCam, vec3 closestPointToSunOnAtmosphereShell, float opaqueDepth, vec4 originalColor) {
-    // Quick fix for when the camera is inside of the opaque geometry, this could perhaps be handled a bit more cleverly
-    if(opaqueDepth == 0) {
-        return originalColor;
+vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
+    float rayDotCam = dot(rayDirection, cameraForward);
+    float rayDotCloudPlane = dot(rayDirection, normalize(rayDirection * vec3(1, 0, 1)));
+    float distCamCloudPlane = abs(rayOrigin.y - cloudHeight);
+
+    vec4 opaqueRes = vec4(0.0);
+
+    float opaqueDepth = 0;
+    vec3 opaquePoint = vec3(0);
+    if(raymarchSDF(rayOrigin, rayDirection, MAX_STEPS, MAX_MARCH_DISTANCE, opaqueDepth, opaquePoint)) {
+        vec3 normal = calculateNormal(opaquePoint);
+        float diffuseIntensity = clamp(dot(sunDirection, normal), 0, 1);
+        opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.01f, 0.2f, 1.0f, 1.0f), diffuseIntensity);
+        opaqueRes.rgb *= pointLightColor * pointLightIntensityMultiplier;
+        opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
     }
+
+    vec3 cloudBoxMin = vec3(-cloudBoxWidth, cloudHeight - cloudDepth, -cloudBoxWidth);
+    vec3 cloudBoxMax = vec3(cloudBoxWidth, cloudHeight + cloudDepth, cloudBoxWidth);
+    vec3 closestPointToSunOnAtmosphereShell = planetOrigin + sunDirection * atmosphereRadius;
+
     
-    float marchDepth = 0;
-
-    // Cloud parameters and variables used when cloud marching
-    float cloudStartDepth = 0;
-    float cloudExitDepth = 0;
-    float depthTraveledThroughClouds = 0;
-    vec4 res = vec4(0);
-
-    // Intersect cloud sphere
-    float tEnterClouds, tExitClouds;
-    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
-        float startDepth = max(tEnterClouds, 0.0);
+    float volumetricDepth = 0;
+    vec4 volumetricRes = vec4(0.0);
+    float tEnter, tExit;
+    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnter, tExit) && tExit > 0) {
+        float startDepth = max(tEnter, 0.0);
         float camAlignedPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
-        cloudStartDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
-        cloudExitDepth = tExitClouds;
-    }
-
-    // Atmosphere parameters and variables used when atmosphere marching
-    float atmosphereStartDepth = MAX_MARCH_DISTANCE;
-    float atmosphereExitDepth = 0;
-    float atmosphereRayLength = 0;
-    float numAtmosphereSamplesTaken = 0;
-    vec3 inScatteredLight = vec3(0.0);
-
-    // Intersect atmosphere... sphere
-    float tEnterAtmosphere, tExitAtmosphere;
-    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnterAtmosphere, tExitAtmosphere) && tExitAtmosphere > 0) {
-        atmosphereStartDepth = max(tEnterAtmosphere, 0);
-        atmosphereExitDepth = tExitAtmosphere;
-        atmosphereRayLength = min(tExitAtmosphere, opaqueDepth) - atmosphereStartDepth;
-    }
+        volumetricDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
+        startDepth = volumetricDepth;
     
-    // Scattering constants (for atmosphere)
-    const float atmosphereStepSize = atmosphereRayLength / (numInscatteringPoints - 1);
+        float depthTraveledThroughMedium = 0;
 
-    // Marching steps
-    float nextCloudMarchDepth = cloudStartDepth; // Used to keep track of the last cloud step
-    float nextAtmosphereMarchDepth = atmosphereStartDepth; // Used to keep track of the last atmosphere step
-    
-    // TRUE to sample the cloud, FALSE to sample the atmosphere
-    bool sampleCloud = nextCloudMarchDepth < nextAtmosphereMarchDepth;
-    marchDepth = sampleCloud ? nextCloudMarchDepth : nextAtmosphereMarchDepth; // The current step's depth
+        for(int i = 0; i < MAX_STEPS; i++) {
 
-    // TODO: replace these with a bit mask
-    bool doneSamplingClouds = false;
-    bool doneSamplingAtmosphere = false;
+            vec3 p = rayOrigin + rayDirection * volumetricDepth;
 
-    // March through both the clouds and the atmosphere at the same time
-    for(int i = 0; i < MAX_STEPS + numInscatteringPoints; i++) {
-        vec3 p = rayOrigin + rayDirection * marchDepth;
-
-        if(sampleCloud) {
             float density = evaluateDensityAt(p);
 
             if (density > 0.0) {
@@ -345,133 +325,10 @@ vec4 calculateIncomingLight(vec3 rayOrigin, vec3 rayDirection, float rayDotCam, 
                 color.rgb *= lin;
                 color.rgb *= color.a;
                 color.rgb *= shadowMultiplier;
-                res += color * (1.0 - res.a);
+                volumetricRes += color * (1.0 - volumetricRes.a);
                 // This doesn't seem to be enough to completely get rid of the outline of the planet showing through clouds, as the atmosphere stepping size is shorter when stepping towards the edge of the planet compared to when stepping just beyond it
                 // Perhaps it would be possible to also march the atmosphere by a constant amount? Perhaps this would mitigate the issue?
-                if (res.a >= 0.999) {
-                    doneSamplingClouds = true;
-                    doneSamplingAtmosphere = true;
-                }
-            }
-
-            depthTraveledThroughClouds += MARCH_SIZE;
-
-            // Samples should be taken at higher frequencies when closer to the camera, i.e. when the depth is low
-            float depthFactor = clamp(max(marchDepth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1);
-            nextCloudMarchDepth = cloudStartDepth + depthTraveledThroughClouds * (samplingIncreaseFactor * depthFactor  + 1);
-
-            if(nextCloudMarchDepth > cloudExitDepth || nextCloudMarchDepth > opaqueDepth) {
-                doneSamplingClouds = true;
-            }
-        } else {
-            // The distance of the sun ray, i.e. the ray that travels from p through the atmosphere towards the sun, is the same as tExit
-            float tEnter, sunRayLength;
-            // We are guaranteed to intersect the atmosphere sphere as we start the ray inside of it, we can therefore use this function to get sunRayLength
-            intersectSphere(p, sunDirection, planetOrigin, atmosphereRadius, tEnter, sunRayLength);
-        
-            // The accumulated amount of light (density) from the point towards the sun
-            float sunRayOpticalDepth = atmosphereOpticalDepth(p, sunDirection, sunRayLength);
-            // The accumulated amount of light (density) from the point back towards the camera
-            // NOTE: this variable creates a somewhat noticeable ring of darkness right around the planet as this is where a ray travels the furthest through the atmosphere, 
-            // this behaviour seems to me to be physically correct but the result is somewhat strange
-            // It also seems to lead to a prononciation of the atmosphere's color bands
-            float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, marchDepth);
-
-            // The light that reaches the camera has an exponential falloff
-            vec3 transmittance = exp(-(sunRayOpticalDepth + viewRayOpticalDepth) * atmosphereScatteringCoefficients);
-        
-            // Sample the density at this inscatter point
-            float density = atmosphereDensityAtPoint(p);
-
-            // Accumulate the density multiplied by the transmittance at this point, i.e. the amount of light that reaches this point and is transmitted towards the camera
-            // Multiplying by (1 - res.a) ensures that clouds occlude the incoming atmosphere light, example ray: EYE ---> CLOUD (occludes 90%) ---> ATMOSPHERE contributes only 10% to pixel color
-            // TODO: add inScatteredLight to res instead (somehow) to avoid blending later, the accumulated color should be updated as we move through the atmosphere
-            inScatteredLight += density * transmittance * atmosphereScatteringCoefficients * atmosphereStepSize * (1 - res.a);
-
-            nextAtmosphereMarchDepth += atmosphereStepSize;
-
-            numAtmosphereSamplesTaken++;
-            if(numAtmosphereSamplesTaken > numInscatteringPoints) {
-                doneSamplingAtmosphere = true;
-            }
-        }
-
-        // Break if we are done sampling both the clouds and the atmosphere
-        if(doneSamplingClouds && doneSamplingAtmosphere) {
-            break;
-        }
-
-        // Update marchDepth
-        sampleCloud = nextCloudMarchDepth < nextAtmosphereMarchDepth && !doneSamplingClouds;
-        marchDepth = sampleCloud ? nextCloudMarchDepth : nextAtmosphereMarchDepth;
-    }
-
-    res = mix(originalColor, res, res.a) * (1 - vec4(inScatteredLight, 0) * res.a) + vec4(inScatteredLight, 0);
-
-    return res;
-}
-
-vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
-    float rayDotCam = dot(rayDirection, cameraForward);
-    float rayDotCloudPlane = dot(rayDirection, normalize(rayDirection * vec3(1, 0, 1)));
-    float distCamCloudPlane = abs(rayOrigin.y - cloudHeight);
-
-    vec4 opaqueRes = vec4(0.0);
-
-    float opaqueDepth = 0;
-    vec3 opaquePoint = vec3(0);
-    if(raymarchSDF(rayOrigin, rayDirection, MAX_STEPS, MAX_MARCH_DISTANCE, opaqueDepth, opaquePoint)) {
-        vec3 normal = calculateNormal(opaquePoint);
-        float diffuseIntensity = clamp(dot(sunDirection, normal), 0, 1);
-        opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.01f, 0.2f, 1.0f, 1.0f), diffuseIntensity);
-        opaqueRes.rgb *= pointLightColor * pointLightIntensityMultiplier;
-        opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
-    }
-
-    vec3 cloudBoxMin = vec3(-cloudBoxWidth, cloudHeight - cloudDepth, -cloudBoxWidth);
-    vec3 cloudBoxMax = vec3(cloudBoxWidth, cloudHeight + cloudDepth, cloudBoxWidth);
-    vec3 closestPointToSunOnAtmosphereShell = planetOrigin + sunDirection * atmosphereRadius;
-
-    /*
-    float volumetricDepth = 0;
-    vec4 volumetricRes = vec4(0.0);
-    float tEnter, tExit;
-    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnter, tExit) && tExit > 0) {
-        float startDepth = max(tEnter, 0.0);
-        float camAlignedPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
-        volumetricDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
-        startDepth = volumetricDepth;
-    
-        float depthTraveledThroughMedium = 0;
-
-        for(int i = 0; i < MAX_STEPS; i++) {
-
-            vec3 p = rayOrigin + rayDirection * volumetricDepth;
-
-            float density = evaluateDensityAt(p);
-
-            if (density > 0.0) {
-                float shadowMultiplier = 1;
-                float ent, ext;
-
-                // Hacky way of determining if a cloud is in shadow, should be updated to be physically correct in the future
-                // Also only "works" with a perfectly spherical planet
-                if(intersectSphere(p, sunDirection, planetOrigin, planetRadius, ent, ext) && ext > 0) {
-                    shadowMultiplier = 1 - max((ext - ent) / 10, 0);
-                }
-
-                // Scale cloud lighting by how far away it is from the closest point on the atmosphere shell, 
-                // hacky and not (even close to) a physically correct way of achieving darker clouds at the far end of the planet
-                shadowMultiplier *= 1 - distance(closestPointToSunOnAtmosphereShell, p) / (atmosphereRadius * 2);
-
-                float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection)) / 0.3, 0.0, 1.0);
-                vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
-                vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
-                color.rgb *= lin;
-                color.rgb *= color.a;
-                color.rgb *= shadowMultiplier;
-                volumetricRes += color * (1.0 - volumetricRes.a);
-                if (volumetricRes.a >= 0.99) {
+                if (volumetricRes.a >= 0.999) {
                     break;
                 }
             }
@@ -501,9 +358,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
     res = res * (1 - atmosphereLight) + atmosphereLight;
 
-    */
-
-    vec4 res = calculateIncomingLight(rayOrigin, rayDirection, rayDotCam, closestPointToSunOnAtmosphereShell, opaqueDepth, opaqueRes);
+    res = volumetricRes + (opaqueRes + atmosphereLight) * (1 - volumetricRes.a);
 
     return res;
 }
