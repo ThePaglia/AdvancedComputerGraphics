@@ -336,6 +336,7 @@ vec4 calculateIncomingLight(vec3 rayOrigin, vec3 rayDirection, float rayDotCam, 
                 shadowMultiplier *= diffuseIntensity;
 
                 float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection)) / 0.3, 0.0, 1.0);
+                // TODO: Make cloud color reflect the incoming sunlight's color, i.e. a nice orange/red at glancing angles
                 vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
                 color.rgb *= lin;
@@ -343,7 +344,8 @@ vec4 calculateIncomingLight(vec3 rayOrigin, vec3 rayDirection, float rayDotCam, 
                 color.rgb *= shadowMultiplier;
                 res += color * (1.0 - res.a);
                 // This doesn't seem to be enough to completely get rid of the outline of the planet showing through clouds, as the atmosphere stepping size is shorter when stepping towards the edge of the planet compared to when stepping just beyond it
-                if (res.a >= 0.99) {
+                // Perhaps it would be possible to also march the atmosphere by a constant amount? Perhaps this would mitigate the issue?
+                if (res.a >= 0.999) {
                     doneSamplingClouds = true;
                     doneSamplingAtmosphere = true;
                 }
@@ -380,6 +382,7 @@ vec4 calculateIncomingLight(vec3 rayOrigin, vec3 rayDirection, float rayDotCam, 
 
             // Accumulate the density multiplied by the transmittance at this point, i.e. the amount of light that reaches this point and is transmitted towards the camera
             // Multiplying by (1 - res.a) ensures that clouds occlude the incoming atmosphere light, example ray: EYE ---> CLOUD (occludes 90%) ---> ATMOSPHERE contributes only 10% to pixel color
+            // TODO: add inScatteredLight to res instead (somehow) to avoid blending later, the accumulated color should be updated as we move through the atmosphere
             inScatteredLight += density * transmittance * atmosphereScatteringCoefficients * atmosphereStepSize * (1 - res.a);
 
             nextAtmosphereMarchDepth += atmosphereStepSize;
