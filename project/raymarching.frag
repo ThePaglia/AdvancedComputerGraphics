@@ -261,6 +261,11 @@ vec3 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
 }
 
 vec4 calculateIncomingLight(vec3 rayOrigin, vec3 rayDirection, float rayDotCam, vec3 closestPointToSunOnAtmosphereShell, float opaqueDepth, vec4 originalColor) {
+    // Quick fix for when the camera is inside of the opaque geometry, this could perhaps be handled a bit more cleverly
+    if(opaqueDepth == 0) {
+        return originalColor;
+    }
+    
     float marchDepth = 0;
 
     // Cloud parameters and variables used when cloud marching
@@ -307,11 +312,9 @@ vec4 calculateIncomingLight(vec3 rayOrigin, vec3 rayDirection, float rayDotCam, 
     // TODO: replace these with a bit mask
     bool doneSamplingClouds = false;
     bool doneSamplingAtmosphere = false;
-    int doneSamplingMask = 1 << 0; // Bit position 0 = atmosphere, bit position 1 = clouds
 
     // March through both the clouds and the atmosphere at the same time
     for(int i = 0; i < MAX_STEPS + numInscatteringPoints; i++) {
-
         vec3 p = rayOrigin + rayDirection * marchDepth;
 
         if(sampleCloud) {
@@ -393,6 +396,7 @@ vec4 calculateIncomingLight(vec3 rayOrigin, vec3 rayDirection, float rayDotCam, 
             }
         }
 
+        // Break if we are done sampling both the clouds and the atmosphere
         if(doneSamplingClouds && doneSamplingAtmosphere) {
             break;
         }
