@@ -278,16 +278,24 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
     }
 
-    vec3 cloudBoxMin = vec3(-cloudBoxWidth, cloudHeight - cloudDepth, -cloudBoxWidth);
-    vec3 cloudBoxMax = vec3(cloudBoxWidth, cloudHeight + cloudDepth, cloudBoxWidth);
+    // Right now the atmosphere is rendered on top of the clouds as their depth cannot be used to cut off the distanceThroughAtmosphere
+    // Perhaps some clever compositing can save us here?
+    vec4 atmosphereLight = vec4(0.0f);
+    float atmosphereRadius = planetRadius + atmosphereDepth;
+    float tEnterAtmosphere, tExitAtmosphere;
+    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnterAtmosphere, tExitAtmosphere) && tExitAtmosphere > 0) {
+        vec3 p = rayOrigin + rayDirection * max(tEnterAtmosphere, 0);
+        float distanceThroughAtmosphere = min(tExitAtmosphere, opaqueDepth) - max(tEnterAtmosphere, 0);
+        atmosphereLight = vec4(calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere), 0);
+    }
+
     vec3 closestPointToSunOnAtmosphereShell = planetOrigin + sunDirection * atmosphereRadius;
 
-    
     float volumetricDepth = 0;
     vec4 volumetricRes = vec4(0.0);
-    float tEnter, tExit;
-    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnter, tExit) && tExit > 0) {
-        float startDepth = max(tEnter, 0.0);
+    float tEnterClouds, tExitClouds;
+    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
+        float startDepth = max(tEnterClouds, 0.0);
         float camAlignedPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
         volumetricDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
         startDepth = volumetricDepth;
@@ -325,6 +333,8 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 color.rgb *= lin;
                 color.rgb *= color.a;
                 color.rgb *= shadowMultiplier;
+                // TODO: calculate the scattering of the cloud's light as it travels towards the camera
+                //color *= exp(-atmosphereOpticalDepth(p, -rayDirection, volumetricDepth - tEnterAtmosphere));
                 volumetricRes += color * (1.0 - volumetricRes.a);
                 // This doesn't seem to be enough to completely get rid of the outline of the planet showing through clouds, as the atmosphere stepping size is shorter when stepping towards the edge of the planet compared to when stepping just beyond it
                 // Perhaps it would be possible to also march the atmosphere by a constant amount? Perhaps this would mitigate the issue?
@@ -339,22 +349,12 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             float depthFactor = clamp(max(volumetricDepth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1) * clamp(samplingFalloffDistance / max(distCamCloudPlane, 1), 0, 1);
             volumetricDepth = startDepth + depthTraveledThroughMedium * (samplingIncreaseFactor * depthFactor  + 1);
 
-            if(volumetricDepth >= tExit || depthTraveledThroughMedium > MAX_MARCH_DISTANCE || volumetricDepth > opaqueDepth)
+            if(volumetricDepth >= tExitClouds || depthTraveledThroughMedium > MAX_MARCH_DISTANCE || volumetricDepth > opaqueDepth)
                 break;
         }
     }
 
     vec4 res = mix(opaqueRes, volumetricRes, volumetricRes.a);
-
-    // Right now the atmosphere is rendered on top of the clouds as their depth cannot be used to cut off the distanceThroughAtmosphere
-    // Perhaps some clever compositing can save us here?
-    vec4 atmosphereLight = vec4(0.0f);
-    float atmosphereRadius = planetRadius + atmosphereDepth;
-    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnter, tExit) && tExit > 0) {
-        vec3 p = rayOrigin + rayDirection * max(tEnter, 0);
-        float distanceThroughAtmosphere = min(tExit, opaqueDepth) - max(tEnter, 0);
-        atmosphereLight = vec4(calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere), 0);
-    }
 
     res = res * (1 - atmosphereLight) + atmosphereLight;
 
