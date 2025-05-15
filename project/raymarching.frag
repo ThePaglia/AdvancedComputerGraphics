@@ -324,6 +324,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 // 0.5 -> gradient extends half of the bottom half
                 // 0.1 -> gradient extends one 10th of the bottom half
                 float lightingFalloff = 0.5;
+                // TODO: calculate lightingFalloff from the difference of the cloudRadius and the atmosphereRadius
                 float diffuseIntensity = clamp(dot(sunDirection, normalize(p - planetOrigin)) * (1 / lightingFalloff) + 1, 0, 1);
 
                 // Scale cloud lighting by how far away it is from the closest point on the atmosphere shell, 
