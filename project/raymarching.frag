@@ -224,9 +224,10 @@ float atmosphereOpticalDepth(vec3 rayOrigin, vec3 rayDirection, float rayLength)
 }
 
 float numInscatteringPoints = 10;
-vec3 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength) {
+vec4 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength, vec4 originalColor) {
     float stepSize = rayLength / (numInscatteringPoints - 1);
     vec3 inScatteredLight = vec3(0.0);
+    float viewRayOpticalDepth = 0.0;
 
     float marchDepth = 0.0;
 
@@ -243,8 +244,8 @@ vec3 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
         // The accumulated amount of light (density) from the point back towards the camera
         // NOTE: this variable creates a somewhat noticeable ring of darkness right around the planet as this is where a ray travels the furthest through the atmosphere, 
         // this behaviour seems to me to be physically correct but the result is somewhat strange
-        // It also seems to lead to a prononciation of the atmosphere's color bands
-        float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, marchDepth);
+        // It also seems to lead to a pronounciation of the atmosphere's color bands
+        viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, marchDepth);
 
         // The light that reaches the camera has an exponential falloff
         vec3 transmittance = exp(-(sunRayOpticalDepth + viewRayOpticalDepth) * atmosphereScatteringCoefficients);
@@ -258,7 +259,10 @@ vec3 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
         marchDepth += stepSize;
     }
 
-    return inScatteredLight;
+    // TODO: Figure out how to properly simulate how much of the light from the planet's surface that is scattered away from the camera
+    float originalColorTransmittance = 1;
+
+    return originalColor * originalColorTransmittance + vec4(inScatteredLight, 0);
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
@@ -286,7 +290,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnterAtmosphere, tExitAtmosphere) && tExitAtmosphere > 0) {
         vec3 p = rayOrigin + rayDirection * max(tEnterAtmosphere, 0);
         float distanceThroughAtmosphere = min(tExitAtmosphere, opaqueDepth) - max(tEnterAtmosphere, 0);
-        atmosphereLight = vec4(calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere), 0);
+        atmosphereLight = calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere, opaqueRes);
     }
 
     vec3 closestPointToSunOnAtmosphereShell = planetOrigin + sunDirection * atmosphereRadius;
@@ -354,11 +358,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         }
     }
 
-    vec4 res = mix(opaqueRes, volumetricRes, volumetricRes.a);
-
-    res = res * (1 - atmosphereLight) + atmosphereLight;
-
-    res = volumetricRes + (opaqueRes + atmosphereLight) * (1 - volumetricRes.a);
+    vec4 res = volumetricRes + atmosphereLight * (1 - volumetricRes.a);
 
     return res;
 }
