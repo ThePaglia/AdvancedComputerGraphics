@@ -277,7 +277,26 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     if(raymarchSDF(rayOrigin, rayDirection, MAX_STEPS, MAX_MARCH_DISTANCE, opaqueDepth, opaquePoint)) {
         vec3 normal = calculateNormal(opaquePoint);
         float diffuseIntensity = clamp(dot(sunDirection, normal), 0, 1);
-        opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.01f, 0.2f, 1.0f, 1.0f), diffuseIntensity);
+
+        float cloudDensityAbove = 0;
+
+        float tEnterInner, tExitInner;
+        if(diffuseIntensity > 0 && intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner) && tExitInner > 0) {
+            float tEnterOuter, tExitOuter;
+            if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterOuter, tExitOuter) && tExitOuter > 0) {
+                float rayLength = tExitOuter - tEnterInner;
+                int numSteps = 6;
+                float stepSize = rayLength / (numSteps - 1);
+                for(int i = 0; i < numSteps; i++) {
+                    vec3 p = opaquePoint + sunDirection * (tEnterInner + i * stepSize);
+
+                    float density = evaluateDensityAt(p);
+                    cloudDensityAbove += max(-density, 0) * stepSize;
+                }
+            }
+        }
+
+        opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.01f, 0.2f, 1.0f, 1.0f), diffuseIntensity * (1 - min(cloudDensityAbove, 1)));
         opaqueRes.rgb *= pointLightColor * pointLightIntensityMultiplier;
         opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
     }
