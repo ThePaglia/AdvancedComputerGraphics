@@ -21,6 +21,9 @@ uniform float pointLightIntensityMultiplier;
 const vec3 ambientColor = vec3(0.60, 0.60, 0.75);
 const float ambientIntensity = 0.9f;
 uniform float cloudTime = 1.0f;
+uniform float cloudShadowIntensity = 4f;
+uniform float cloudShadowCutoff = 0.5f;
+
 
 // Raymarching
 #define MAX_STEPS 500
@@ -280,15 +283,16 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
         float cloudDensityAbove = 0;
 
+        //TODO: Figure out why clouds don't act exactly as expected, right now it seems like the shadow rays are cast from the sphere's normal out instead of towards the sun, very strange
         float tEnterInner, tExitInner;
-        if(diffuseIntensity > 0 && intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner) && tExitInner > 0) {
+        int numShadowSteps = 6;
+        if(diffuseIntensity > 0 && intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner)) {
             float tEnterOuter, tExitOuter;
-            if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterOuter, tExitOuter) && tExitOuter > 0) {
-                float rayLength = tExitOuter - tEnterInner;
-                int numSteps = 6;
-                float stepSize = rayLength / (numSteps - 1);
-                for(int i = 0; i < numSteps; i++) {
-                    vec3 p = opaquePoint + sunDirection * (tEnterInner + i * stepSize);
+            if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterOuter, tExitOuter)) {
+                float rayLength = tExitOuter - tExitInner;
+                float stepSize = rayLength / (numShadowSteps - 1);
+                for(int i = 0; i < numShadowSteps; i++) {
+                    vec3 p = opaquePoint + sunDirection * (i * stepSize);
 
                     float density = evaluateDensityAt(p);
                     cloudDensityAbove += max(-density, 0) * stepSize;
@@ -296,8 +300,11 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             }
         }
 
-        opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.01f, 0.2f, 1.0f, 1.0f), diffuseIntensity * (1 - min(cloudDensityAbove, 1)));
+        cloudDensityAbove *= cloudShadowIntensity;
+
+        opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.01f, 0.2f, 1.0f, 1.0f), diffuseIntensity);
         opaqueRes.rgb *= pointLightColor * pointLightIntensityMultiplier;
+        opaqueRes.rgb *= clamp(1 - cloudDensityAbove, cloudShadowCutoff, 1.0);
         opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
     }
 
