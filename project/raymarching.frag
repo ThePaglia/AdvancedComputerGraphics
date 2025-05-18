@@ -384,6 +384,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             volumetricDepth = startDepth + depthTraveledThroughMedium * (samplingIncreaseFactor * depthFactor  + 1);
 
             // TODO: Figure out why we don't get a performance increase when jumping forward through the empty space between the planet and the start of the cloud layer (which is what this part of the code is meant to do)
+            // NOTE: I realized it's because we don't update startDepth as well! -> PLEASE FIX
             if(!hasJumpedForward && volumetricDepth > tEnterInnerSphere) {
                 volumetricDepth = tExitInnerSphere;
                 hasJumpedForward = true;
