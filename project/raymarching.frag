@@ -108,7 +108,7 @@ float evaluateDensityAt(vec3 p) {
     float largeHoleNoise = fbm(p * cloudScale); // lower frequency = larger features
     float holeMask = smoothstep(cloudStepMin, cloudStepMax, largeHoleNoise); // controls size/sharpness of holes
 
-    return shellDensity * holeMask;
+    return holeMask * shellDensity;
 }
 
 float sdf(vec3 p) {
@@ -283,19 +283,18 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
         float cloudDensityAbove = 0;
 
-        //TODO: Figure out why clouds don't act exactly as expected, right now it seems like the shadow rays are cast from the sphere's normal out instead of towards the sun, very strange
         float tEnterInner, tExitInner;
-        int numShadowSteps = 6;
+        int numShadowSteps = 8;
         if(diffuseIntensity > 0 && intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner)) {
             float tEnterOuter, tExitOuter;
             if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterOuter, tExitOuter)) {
                 float rayLength = tExitOuter - tExitInner;
                 float stepSize = rayLength / (numShadowSteps - 1);
                 for(int i = 0; i < numShadowSteps; i++) {
-                    vec3 p = opaquePoint + sunDirection * (i * stepSize);
+                    vec3 p = opaquePoint + sunDirection * (tExitInner + i * stepSize);
 
                     float density = evaluateDensityAt(p);
-                    cloudDensityAbove += max(-density, 0) * stepSize;
+                    cloudDensityAbove += max(density, 0) * stepSize;
                 }
             }
         }
