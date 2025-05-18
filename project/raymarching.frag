@@ -291,6 +291,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 float rayLength = tExitOuter - tExitInner;
                 float stepSize = rayLength / (numShadowSteps - 1);
                 for(int i = 0; i < numShadowSteps; i++) {
+                    // You could add the offset here to make shadow artifacting somewhat less noticeable
                     vec3 p = opaquePoint + sunDirection * (tExitInner + i * stepSize);
 
                     float density = evaluateDensityAt(p);
@@ -324,13 +325,16 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     vec4 volumetricRes = vec4(0.0);
     float tEnterClouds, tExitClouds;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
+        float tEnterInnerSphere, tExitInnerSphere;
+        if(!intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInnerSphere, tExitInnerSphere))
+            tEnterInnerSphere = MAX_MARCH_DISTANCE;
         float startDepth = max(tEnterClouds, 0.0);
         float camAlignedPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
         volumetricDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
         startDepth = volumetricDepth;
     
         float depthTraveledThroughMedium = 0;
-
+        bool hasJumpedForward = false;
         for(int i = 0; i < MAX_STEPS; i++) {
 
             vec3 p = rayOrigin + rayDirection * volumetricDepth;
@@ -379,8 +383,15 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             float depthFactor = clamp(max(volumetricDepth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1) * clamp(samplingFalloffDistance / max(distCamCloudPlane, 1), 0, 1);
             volumetricDepth = startDepth + depthTraveledThroughMedium * (samplingIncreaseFactor * depthFactor  + 1);
 
-            if(volumetricDepth >= tExitClouds || depthTraveledThroughMedium > MAX_MARCH_DISTANCE || volumetricDepth > opaqueDepth)
+            // TODO: Figure out why we don't get a performance increase when jumping forward through the empty space between the planet and the start of the cloud layer (which is what this part of the code is meant to do)
+            if(!hasJumpedForward && volumetricDepth > tEnterInnerSphere) {
+                volumetricDepth = tExitInnerSphere;
+                hasJumpedForward = true;
+            }
+
+            if(volumetricDepth >= opaqueDepth || volumetricDepth >= tExitClouds || depthTraveledThroughMedium > MAX_MARCH_DISTANCE)
                 break;
+            
         }
     }
 
