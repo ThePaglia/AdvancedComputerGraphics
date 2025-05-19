@@ -325,14 +325,20 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     vec4 volumetricRes = vec4(0.0);
     float tEnterClouds, tExitClouds;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
-        float tEnterInnerSphere, tExitInnerSphere;
-        if(!intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInnerSphere, tExitInnerSphere))
-            tEnterInnerSphere = MAX_MARCH_DISTANCE;
         float startDepth = max(tEnterClouds, 0.0);
-        float camAlignedPlane = ceil((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
+
+        float tEnterInnerSphere, tExitInnerSphere;
+        if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInnerSphere, tExitInnerSphere)) {
+            startDepth = tEnterInnerSphere <= 0 ? max(tExitInnerSphere, 0.0) : startDepth;
+            tEnterInnerSphere = tEnterInnerSphere <= 0 ? MAX_MARCH_DISTANCE : tEnterInnerSphere;
+        } else {
+            tEnterInnerSphere = MAX_MARCH_DISTANCE;
+        }
+
+        float camAlignedPlane = floor((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
         volumetricDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
         startDepth = volumetricDepth;
-    
+
         float depthTraveledThroughMedium = 0;
         bool hasJumpedForward = false;
         for(int i = 0; i < MAX_STEPS; i++) {
@@ -381,18 +387,19 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
             // Samples should be taken at higher frequencies when closer to the camera, i.e. when the depth is low
             float depthFactor = clamp(max(volumetricDepth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1) * clamp(samplingFalloffDistance / max(distCamCloudPlane, 1), 0, 1);
-            volumetricDepth = startDepth + depthTraveledThroughMedium * (samplingIncreaseFactor * depthFactor  + 1);
+            volumetricDepth = startDepth + depthTraveledThroughMedium;// * (samplingIncreaseFactor * depthFactor  + 1);
 
-            // TODO: Figure out why we don't get a performance increase when jumping forward through the empty space between the planet and the start of the cloud layer (which is what this part of the code is meant to do)
-            // NOTE: I realized it's because we don't update startDepth as well! -> PLEASE FIX
-            if(!hasJumpedForward && volumetricDepth > tEnterInnerSphere) {
-                volumetricDepth = tExitInnerSphere;
+            // Jump forward through the empty space between the planet and the start of the cloud layer
+            if(!hasJumpedForward && volumetricDepth >= tEnterInnerSphere) {
+                startDepth += tExitInnerSphere - max(tEnterInnerSphere, 0.0) - MARCH_SIZE;
+                float camAlignedPlane = floor((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
+                volumetricDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
+                startDepth = volumetricDepth;
                 hasJumpedForward = true;
             }
 
-            if(volumetricDepth >= opaqueDepth || volumetricDepth >= tExitClouds || depthTraveledThroughMedium > MAX_MARCH_DISTANCE)
+            if(volumetricDepth >= opaqueDepth || volumetricDepth >= tExitClouds)
                 break;
-            
         }
     }
 
