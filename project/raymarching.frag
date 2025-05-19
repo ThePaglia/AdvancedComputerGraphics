@@ -275,6 +275,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
     vec4 opaqueRes = vec4(0.0);
 
+    // Calculate the pixel contribution of opaque geometry
     float opaqueDepth = 0;
     vec3 opaquePoint = vec3(0);
     if(raymarchSDF(rayOrigin, rayDirection, MAX_STEPS, MAX_MARCH_DISTANCE, opaqueDepth, opaquePoint)) {
@@ -283,6 +284,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
         float cloudDensityAbove = 0;
 
+        // Calculate cloud density above (i.e. in the sun's direction) this point
         float tEnterInner, tExitInner;
         int numShadowSteps = 8;
         if(diffuseIntensity > 0 && intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner)) {
@@ -307,46 +309,48 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         opaqueRes.rgb *= clamp(1 - cloudDensityAbove, cloudShadowCutoff, 1.0);
         opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
     }
-
-    // Right now the atmosphere is rendered on top of the clouds as their depth cannot be used to cut off the distanceThroughAtmosphere
-    // Perhaps some clever compositing can save us here?
-    vec4 atmosphereLight = vec4(0.0f);
-    float atmosphereRadius = planetRadius + atmosphereDepth;
-    float tEnterAtmosphere, tExitAtmosphere;
-    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnterAtmosphere, tExitAtmosphere) && tExitAtmosphere > 0) {
-        vec3 p = rayOrigin + rayDirection * max(tEnterAtmosphere, 0);
-        float distanceThroughAtmosphere = min(tExitAtmosphere, opaqueDepth) - max(tEnterAtmosphere, 0);
-        atmosphereLight = calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere, opaqueRes);
-    }
-
-    vec3 closestPointToSunOnAtmosphereShell = planetOrigin + sunDirection * atmosphereRadius;
-
+    
+    // The depth of the current ray marched step through the clouds
     float volumetricDepth = 0;
     vec4 volumetricRes = vec4(0.0);
+
+    // Accumulate cloud color (volumetricRes) if we hit the cloud shell
     float tEnterClouds, tExitClouds;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
         float startDepth = max(tEnterClouds, 0.0);
+        
+        // We need to keep track of whether or not we have skipped the inner cloud shell, i.e. entered a cloud region and then exited it and jumped forward to the next cloud region on the other side of the cloud shell
+        bool hasSkippedInnerCloudShell = false;
 
+        // Check if we hit the space in between the clouds and the planet (the "inner sphere"). If so, we can skip traversing it as there are no clouds there
         float tEnterInnerSphere, tExitInnerSphere;
-        if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInnerSphere, tExitInnerSphere)) {
-            startDepth = tEnterInnerSphere <= 0 ? max(tExitInnerSphere, 0.0) : startDepth;
-            tEnterInnerSphere = tEnterInnerSphere <= 0 ? MAX_MARCH_DISTANCE : tEnterInnerSphere;
+        if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInnerSphere, tExitInnerSphere) && tExitInnerSphere > 0) {
+            // If we are inside the space between the clouds and the planet (i.e. if tEnterInnerSphere < 0, i.e. we enter the sphere behind us), jump forward to just before we enter the clouds
+            startDepth = tEnterInnerSphere <= 0 ? max(tExitInnerSphere, 0.0) - MARCH_SIZE : startDepth;
+            // If we are inside the space between the clouds and the planet, set hasSkippedInnerCloudShell to true, this ensures that we won't jump forward later again (as we have already done it on the last row)
+            hasSkippedInnerCloudShell = tEnterInnerSphere <= 0;
         } else {
-            tEnterInnerSphere = MAX_MARCH_DISTANCE;
+            // If we did not hit the space between the clouds and the planet, set hasSkippedInnerCloudShell to true, this ensures that we won't jump forward later
+            hasSkippedInnerCloudShell = true;
         }
 
+        // Set the start depth to a camera aligned plane. This gets rid of "hitbox" artifacts arising from hitting the cloud sphere at non-discretisized distances from the camera
         float camAlignedPlane = floor((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
         volumetricDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
         startDepth = volumetricDepth;
 
+        // This is used to keep track of the distance traveled through the clouds
         float depthTraveledThroughMedium = 0;
-        bool hasJumpedForward = false;
-        for(int i = 0; i < MAX_STEPS; i++) {
 
+        // Raymarch through the cloud shell and accumulate the result
+        for(int i = 0; i < MAX_STEPS; i++) {
+            // Get the point at the current depth
             vec3 p = rayOrigin + rayDirection * volumetricDepth;
 
+            // Get the density at the current point
             float density = evaluateDensityAt(p);
 
+            // Accumulate the result if the density is above 0.0
             if (density > 0.0) {
                 float shadowMultiplier = 1;
                 float ent, ext;
@@ -376,33 +380,46 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 // TODO: calculate the scattering of the cloud's light as it travels towards the camera
                 //color *= exp(-atmosphereOpticalDepth(p, -rayDirection, volumetricDepth - tEnterAtmosphere));
                 volumetricRes += color * (1.0 - volumetricRes.a);
-                // This doesn't seem to be enough to completely get rid of the outline of the planet showing through clouds, as the atmosphere stepping size is shorter when stepping towards the edge of the planet compared to when stepping just beyond it
-                // Perhaps it would be possible to also march the atmosphere by a constant amount? Perhaps this would mitigate the issue?
+
+                // We can immediately break out of the loop if the transparency is greater than this treshold, the reasoning is that any further steps would contribute an insignificant amount to the pixel color
                 if (volumetricRes.a >= 0.999) {
                     break;
                 }
             }
 
+            // Move forward one step through the medium
             depthTraveledThroughMedium += MARCH_SIZE;
+            volumetricDepth = startDepth + depthTraveledThroughMedium;
 
-            // Samples should be taken at higher frequencies when closer to the camera, i.e. when the depth is low
-            float depthFactor = clamp(max(volumetricDepth - samplingIncreaseDepth, 0) / MAX_MARCH_DISTANCE, 0, 1) * clamp(samplingFalloffDistance / max(distCamCloudPlane, 1), 0, 1);
-            volumetricDepth = startDepth + depthTraveledThroughMedium;// * (samplingIncreaseFactor * depthFactor  + 1);
-
-            // Jump forward through the empty space between the planet and the start of the cloud layer
-            if(!hasJumpedForward && volumetricDepth >= tEnterInnerSphere) {
+            // Jump forward through the empty space between the planet and the start of the cloud layer if we enter the "inner shell" (as described before)
+            // NOTE: that jumping forward still leads to some artifacting around the edges of the inner sphere, at glancing angles you can kind of see where the shell starts. Probably has something to do with how we jump forward
+            if(!hasSkippedInnerCloudShell && volumetricDepth >= tEnterInnerSphere) {
                 startDepth += tExitInnerSphere - max(tEnterInnerSphere, 0.0) - MARCH_SIZE;
+
+                // We must align the new starting point to a discretisized value from the camera plane
                 float camAlignedPlane = floor((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
                 volumetricDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
                 startDepth = volumetricDepth;
-                hasJumpedForward = true;
+                hasSkippedInnerCloudShell = true;
             }
 
+            // We can break out of the loop if we hit the opaqueDepth or exit the outer edge of the cloud shell
             if(volumetricDepth >= opaqueDepth || volumetricDepth >= tExitClouds)
                 break;
         }
     }
 
+    // Calculate the atmosphere lighting contribution
+    vec4 atmosphereLight = vec4(0.0f);
+    float atmosphereRadius = planetRadius + atmosphereDepth;
+    float tEnterAtmosphere, tExitAtmosphere;
+    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnterAtmosphere, tExitAtmosphere) && tExitAtmosphere > 0) {
+        vec3 p = rayOrigin + rayDirection * max(tEnterAtmosphere, 0);
+        float distanceThroughAtmosphere = min(tExitAtmosphere, opaqueDepth) - max(tEnterAtmosphere, 0);
+        atmosphereLight = calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere, opaqueRes);
+    }
+
+    // Blend together the atmospheric result with the volumetric one, depending on volumetric alpha
     vec4 res = volumetricRes + atmosphereLight * (1 - volumetricRes.a);
 
     return res;
