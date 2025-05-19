@@ -68,6 +68,7 @@ float cloudStepMin = 0.01f;
 float cloudStepMax = 0.46f;
 float cloudShadowIntensity = 3.0f;
 float cloudShadowCutoff = 0.1f;
+float cloudLightingFalloff = 0.5f;
 float atmosphereDepth = 5.6f;
 float atmosphereDensityFalloff = 5.5f;
 vec3 colorBandWavelengths = vec3(700, 530, 440);
@@ -150,7 +151,8 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "cloudStepMin", cloudStepMin);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudShadowCutoff", cloudShadowCutoff);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudShadowIntensity", cloudShadowIntensity);
-		labhelper::setUniformSlow(currentShaderProgram, "cloudStepMax", cloudStepMax);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudStepMax", cloudStepMax);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudLightingFalloff", cloudLightingFalloff);
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDepth", atmosphereDepth);
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDensityFalloff", atmosphereDensityFalloff);
 	vec3 scatteringCoefficients = vec3(pow(300 / colorBandWavelengths.x, 4), pow(300 / colorBandWavelengths.y, 4), pow(300 / colorBandWavelengths.z, 4)) * atmosphereScatteringStrength;
@@ -328,6 +330,7 @@ void gui()
 	ImGui::SliderFloat("Cloud Step Max", &cloudStepMax, 0, 1);
 	ImGui::SliderFloat("Cloud Shadow Cutoff", &cloudShadowCutoff, 0, 1);
 	ImGui::SliderFloat("Cloud Shadow Intensity", &cloudShadowIntensity, 0, 10);
+	ImGui::SliderFloat("Cloud Lighting Fraction", &cloudLightingFalloff, 0.001, 1);
 	ImGui::Text("Atmosphere");
 	ImGui::SliderFloat("Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Density Falloff", &atmosphereDensityFalloff, 0, 10);

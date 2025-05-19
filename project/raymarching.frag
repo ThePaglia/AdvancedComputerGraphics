@@ -51,6 +51,7 @@ uniform float cloudScale = 1.0f;
 uniform float atmosphereDepth = 3f;
 uniform float cloudStepMin = 0.1f;
 uniform float cloudStepMax = 0.8f;
+uniform float cloudLightingFalloff = 0.5f;
 uniform float atmosphereDensityFalloff = 2f;
 uniform vec3 atmosphereScatteringCoefficients = vec3(0, 0, 0);
 
@@ -362,7 +363,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 // 1.0 -> gradient extends the whole bottom half
                 // 0.5 -> gradient extends half of the bottom half
                 // 0.1 -> gradient extends one 10th of the bottom half
-                float lightingFalloff = 0.5;
+                float lightingFalloff = cloudLightingFalloff;
                 // TODO: calculate lightingFalloff from the difference of the cloudRadius and the atmosphereRadius
                 float diffuseIntensity = clamp(dot(sunDirection, normalize(p - planetOrigin)) * (1 / lightingFalloff) + 1, 0, 1);
 
