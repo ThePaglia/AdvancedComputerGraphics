@@ -54,6 +54,7 @@ uniform float cloudStepMax = 0.8f;
 uniform float cloudLightingFalloff = 0.5f;
 uniform float atmosphereDensityFalloff = 2f;
 uniform vec3 atmosphereScatteringCoefficients = vec3(0, 0, 0);
+uniform float atmosphereDensityAtSeaLevel = 0.5f;
 
 // Precalculated constants
 const float atmosphereRadius = planetRadius + atmosphereDepth;
@@ -204,11 +205,11 @@ float atmosphereDensityAtPoint(vec3 p) {
     // normalized height from 1 at the edge of the atmosphere shell to 0 at the surface
     float normalizedHeight = heightAboveSurface / atmosphereDepth;
     // Multiplying by (1 - normalizedHeight) is a bit dirty but ensures that the density is 0 at the edge of the atmosphere shell
-    float density = exp(-normalizedHeight * atmosphereDensityFalloff) * (1 - normalizedHeight);
+    float density = exp(-normalizedHeight * atmosphereDensityFalloff) * (1 - normalizedHeight) * atmosphereDensityAtSeaLevel;
     return density;
 }
 
-float numOpticalDepthPoints = 10;
+float numOpticalDepthPoints = 8;
 float atmosphereOpticalDepth(vec3 rayOrigin, vec3 rayDirection, float rayLength) {
     float stepSize = rayLength / (numOpticalDepthPoints - 1);
     float opticalDepth = 0.0f;
@@ -227,7 +228,7 @@ float atmosphereOpticalDepth(vec3 rayOrigin, vec3 rayDirection, float rayLength)
     return opticalDepth;
 }
 
-float numInscatteringPoints = 10;
+float numInscatteringPoints = 8;
 vec4 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength, vec4 originalColor) {
     float stepSize = rayLength / (numInscatteringPoints - 1);
     vec3 inScatteredLight = vec3(0.0);
@@ -310,6 +311,16 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         opaqueRes.rgb *= clamp(1 - cloudDensityAbove, cloudShadowCutoff, 1.0);
         opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
     }
+
+    // Calculate the atmosphere lighting contribution
+    vec4 atmosphereLight = vec4(0.0f);
+    float atmosphereRadius = planetRadius + atmosphereDepth;
+    float tEnterAtmosphere, tExitAtmosphere;
+    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnterAtmosphere, tExitAtmosphere) && tExitAtmosphere > 0) {
+        vec3 p = rayOrigin + rayDirection * max(tEnterAtmosphere, 0);
+        float distanceThroughAtmosphere = min(tExitAtmosphere, opaqueDepth) - max(tEnterAtmosphere, 0);
+        atmosphereLight = calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere, opaqueRes);
+    }
     
     // The depth of the current ray marched step through the clouds
     float volumetricDepth = 0;
@@ -371,6 +382,9 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 // hacky and not (even close to) a physically correct way of achieving darker clouds at the far end of the planet
                 shadowMultiplier *= diffuseIntensity;
 
+                // TODO: perhaps it is possible to increment the opticalDepth using atmosphereDensityAtPoint as we step through the atmosphere? Instead of recalculating it every frame (which the following line does)
+                float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, volumetricDepth - max(tEnterAtmosphere, 0));
+
                 float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection)) / 0.3, 0.0, 1.0);
                 // TODO: Make cloud color reflect the incoming sunlight's color, i.e. a nice orange/red at glancing angles
                 vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
@@ -378,8 +392,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 color.rgb *= lin;
                 color.rgb *= color.a;
                 color.rgb *= shadowMultiplier;
-                // TODO: calculate the scattering of the cloud's light as it travels towards the camera
-                //color *= exp(-atmosphereOpticalDepth(p, -rayDirection, volumetricDepth - tEnterAtmosphere));
+                color.rgb *= exp(-viewRayOpticalDepth); // Not sure if this is the best way of multiplying the contribution of the viewRayOpticalDepth as it affects the transparency
                 volumetricRes += color * (1.0 - volumetricRes.a);
 
                 // We can immediately break out of the loop if the transparency is greater than this treshold, the reasoning is that any further steps would contribute an insignificant amount to the pixel color
@@ -408,16 +421,6 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             if(volumetricDepth >= opaqueDepth || volumetricDepth >= tExitClouds)
                 break;
         }
-    }
-
-    // Calculate the atmosphere lighting contribution
-    vec4 atmosphereLight = vec4(0.0f);
-    float atmosphereRadius = planetRadius + atmosphereDepth;
-    float tEnterAtmosphere, tExitAtmosphere;
-    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnterAtmosphere, tExitAtmosphere) && tExitAtmosphere > 0) {
-        vec3 p = rayOrigin + rayDirection * max(tEnterAtmosphere, 0);
-        float distanceThroughAtmosphere = min(tExitAtmosphere, opaqueDepth) - max(tEnterAtmosphere, 0);
-        atmosphereLight = calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere, opaqueRes);
     }
 
     // Blend together the atmospheric result with the volumetric one, depending on volumetric alpha

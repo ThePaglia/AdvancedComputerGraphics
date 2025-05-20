@@ -87,6 +87,7 @@ float atmosphereDepth = 5.6f;
 float atmosphereDensityFalloff = 5.5f;
 vec3 colorBandWavelengths = vec3(700, 530, 440);
 float atmosphereScatteringStrength = 3.0f;
+float atmosphereDensityAtSeaLevel = 0.5f;
 
 float pointLightIntensityMultiplier = 0.8f;
 
@@ -189,6 +190,7 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "cloudLightingFalloff", cloudLightingFalloff);
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDepth", atmosphereDepth);
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDensityFalloff", atmosphereDensityFalloff);
+	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDensityAtSeaLevel", atmosphereDensityAtSeaLevel);
 	vec3 scatteringCoefficients = vec3(pow(300 / colorBandWavelengths.x, 4), pow(300 / colorBandWavelengths.y, 4), pow(300 / colorBandWavelengths.z, 4)) * atmosphereScatteringStrength;
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereScatteringCoefficients", scatteringCoefficients);
 	
@@ -417,6 +419,7 @@ void gui()
 	ImGui::Text("Atmosphere");
 	ImGui::SliderFloat("Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Density Falloff", &atmosphereDensityFalloff, 0, 10);
+	ImGui::SliderFloat("Density at Sea Level", &atmosphereDensityAtSeaLevel, 0, 1);
 	ImGui::SliderFloat3("Scattering Wavelengths", (float*)&colorBandWavelengths, 0, 1000);
 	ImGui::SliderFloat("Scattering Strength", &atmosphereScatteringStrength, 0, 10);
 	ImGui::SliderFloat3("Sun Position", (float*)&lightPosition, -10, 10);
