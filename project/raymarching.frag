@@ -392,7 +392,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 color.rgb *= lin;
                 color.rgb *= color.a;
                 color.rgb *= shadowMultiplier;
-                color.rgb *= exp(-viewRayOpticalDepth); // Not sure if this is the best way of multiplying the contribution of the viewRayOpticalDepth as it affects the transparency
+                color *= exp(-viewRayOpticalDepth); // Not sure if this is the best way of multiplying the contribution of the viewRayOpticalDepth as it affects the transparency
                 volumetricRes += color * (1.0 - volumetricRes.a);
 
                 // We can immediately break out of the loop if the transparency is greater than this treshold, the reasoning is that any further steps would contribute an insignificant amount to the pixel color
