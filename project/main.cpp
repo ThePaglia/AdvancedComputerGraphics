@@ -10,6 +10,7 @@ extern "C" _declspec(dllexport) unsigned int NvOptimusEnablement = 0x00000001;
 
 #include <imgui.h>
 #include <labhelper.h>
+#include <Model.h>
 
 #include <perf.h>
 
@@ -38,7 +39,12 @@ GLuint vertexArrayObject;
 
 // Shader programs
 GLuint raymarchingProgram;
-GLuint rasterizationProgram;
+
+///////////////////////////////////////////////////////////////////////////////
+// Shader programs
+///////////////////////////////////////////////////////////////////////////////
+GLuint shaderProgram;       // Shader for rendering the final image
+GLuint simpleShaderProgram; // Shader used to draw the shadow map
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
@@ -46,6 +52,10 @@ vec3 cameraPosition(0.0f, 0.0f, -30);
 vec3 cameraDirection = normalize(vec3(0.0f) + cameraPosition);
 vec3 cameraRight = cross(cameraDirection, worldUp);
 vec3 cameraUp = cross(cameraRight, cameraDirection);
+
+// Model parameters
+labhelper::Model* planetModel = nullptr;
+mat4 planetModelMatrix;
 
 float cameraSpeed = 10;
 
@@ -82,16 +92,22 @@ float pointLightIntensityMultiplier = 0.8f;
 
 void loadShaders(bool is_reload)
 {
-	GLuint shader = labhelper::loadShaderProgram("../project/raymarching.vert", "../project/raymarching.frag", is_reload);
+	GLuint shader = labhelper::loadShaderProgram("../project/simple.vert", "../project/simple.frag", is_reload);
 	if (shader != 0)
 	{
-		raymarchingProgram = shader;
+		simpleShaderProgram = shader;
 	}
 
-	GLuint shader2 = labhelper::loadShaderProgram("../project/simple.vert", "../project/simple.frag", is_reload);
-	if (shader2 != 0)
+	shader = labhelper::loadShaderProgram("../project/shading.vert", "../project/shading.frag", is_reload);
+	if (shader != 0)
 	{
-		rasterizationProgram = shader2;
+		shaderProgram = shader;
+	}
+
+	shader = labhelper::loadShaderProgram("../project/raymarching.vert", "../project/raymarching.frag", is_reload);
+	if (shader != 0) 
+	{
+		raymarchingProgram = shader;
 	}
 }
 
@@ -118,54 +134,8 @@ void loadNoiseTexture(const std::string& filepath)
 }
 
 void initializePlanet() {
-	ENSURE_INITIALIZE_ONLY_ONCE();
-	const float positions[] = {
-		//	 X      Y     Z
-		0.0f,  0.5f,  1.0f, // v0
-		-0.5f, -0.5f, 1.0f, // v1
-		0.5f,  -0.5f, 1.0f  // v2
-	};
-
-
-	// Create a handle for the position vertex buffer object
-	// See OpenGL Spec �2.9 Buffer Objects
-	// - http://www.cse.chalmers.se/edu/course/TDA361/glspec30.20080923.pdf#page=54
-	GLuint positionBuffer;
-	glGenBuffers(1, &positionBuffer);
-	// Set the newly created buffer as the current one
-	glBindBuffer(GL_ARRAY_BUFFER, positionBuffer);
-	// Send the vertex position data to the current buffer
-	glBufferData(GL_ARRAY_BUFFER, 9 * sizeof(float), positions,
-		GL_STATIC_DRAW);
-
-	const float colors[] = {
-		//   R     G     B
-		1.0f, 0.0f, 0.0f, // White
-		0.0f, 1.0f, 0.0f, // White
-		0.0f, 0.0f, 1.0f  // White
-	};
-	// Create a handle for the vertex color buffer
-	GLuint colorBuffer;
-	glGenBuffers(1, &colorBuffer);
-	// Set the newly created buffer as the current one
-	glBindBuffer(GL_ARRAY_BUFFER, colorBuffer);
-	// Send the vertex color data to the current buffer
-	glBufferData(GL_ARRAY_BUFFER, 9 * sizeof(float), colors, GL_STATIC_DRAW);
-
-	glGenVertexArrays(1, &vertexArrayObject);
-	// Bind the vertex array object
-	// The following calls will affect this vertex array object.
-	glBindVertexArray(vertexArrayObject);
-	// Makes positionBuffer the current array buffer for subsequent calls.
-	glBindBuffer(GL_ARRAY_BUFFER, positionBuffer);
-	// Attaches positionBuffer to vertexArrayObject, in the 0th attribute location
-	glVertexAttribPointer(0, 3, GL_FLOAT, false /*normalized*/, 0 /*stride*/, 0 /*offset*/);
-	// Makes colorBuffer the current array buffer for subsequent calls.
-	glBindBuffer(GL_ARRAY_BUFFER, colorBuffer);
-	// Attaches colorBuffer to vertexArrayObject, in the 1st attribute location
-	glVertexAttribPointer(1, 3, GL_FLOAT, false /*normalized*/, 0 /*stride*/, 0 /*offset*/);
-	glEnableVertexAttribArray(0); // Enable the vertex position attribute
-	glEnableVertexAttribArray(1);
+	planetModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
+	planetModelMatrix = translate(-50.0f * vec3(0, 0, 1));
 }
 
 // This function is called once at the start of the program and never again
@@ -176,13 +146,13 @@ void initialize()
 	// Load Shaders
 	loadShaders(false);
 
+	initializePlanet();
+
 	// Load noise texture
 	loadNoiseTexture("../textures/noise.png");
 
-	//glEnable(GL_DEPTH_TEST); // enable Z-buffering
-	//glEnable(GL_CULL_FACE);	 // enables backface culling
-
-	initializePlanet();
+	glEnable(GL_DEPTH_TEST); // enable Z-buffering
+	glEnable(GL_CULL_FACE);  // enables backface culling
 
 }
 
@@ -240,13 +210,48 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::drawFullScreenQuad();
 }
 
-void drawSolidGeometry(GLuint currentShaderProgram, const mat4& viewMatrix, mat4& projectionMatrix) {
+void drawSolidGeometry(GLuint currentShaderProgram, 
+	const mat4& viewMatrix,
+	const mat4& projectionMatrix,
+	const mat4& lightViewMatrix, 
+	const mat4& lightProjectionMatrix) {
 	glUseProgram(currentShaderProgram);
-	labhelper::setUniformSlow(currentShaderProgram, "triangleColor", glm::vec3(1, 1, 1));
-	glBindVertexArray(vertexArrayObject);
-	// Submit triangles from currently bound vertex array object.
-	glDrawArrays(GL_TRIANGLES, 0, 3); // Render 1 triangle
-	glUseProgram(0);
+
+	// Light source
+	vec4 viewSpaceLightPosition = viewMatrix * vec4(lightPosition, 1.0f);
+	labhelper::setUniformSlow(currentShaderProgram, "point_light_color", vec3(1));
+	labhelper::setUniformSlow(currentShaderProgram, "point_light_intensity_multiplier",
+		1);
+	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightPosition", vec3(viewSpaceLightPosition));
+	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightDir",
+		normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
+
+
+	// Environment
+	labhelper::setUniformSlow(currentShaderProgram, "environment_multiplier", 1);
+
+	// camera
+	labhelper::setUniformSlow(currentShaderProgram, "viewInverse", inverse(viewMatrix));
+
+	// landing pad
+	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
+		projectionMatrix * viewMatrix * planetModelMatrix);
+	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * planetModelMatrix);
+	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
+		inverse(transpose(viewMatrix * planetModelMatrix)));
+
+	labhelper::render(planetModel, false);
+}
+
+void debugDrawLight(const glm::mat4& viewMatrix,
+	const glm::mat4& projectionMatrix,
+	const glm::vec3& worldSpaceLightPos)
+{
+	mat4 modelMatrix = glm::translate(worldSpaceLightPos);
+	glUseProgram(shaderProgram);
+	labhelper::setUniformSlow(shaderProgram, "modelViewProjectionMatrix",
+		projectionMatrix * viewMatrix * modelMatrix);
+	labhelper::render(planetModel);
 }
 
 // This function will be called once per frame, so the code to set up
@@ -264,15 +269,17 @@ void display(void)
 		{
 			windowWidth = w;
 			windowHeight = h;
-		}	
-	}	
+		}
+	}
 
 	// setup matrices
 	mat4 projMatrix = perspective(radians(45.0f), float(windowWidth) / float(windowHeight), 5.0f, 2000.0f);
 	mat4 viewMatrix = lookAt(cameraPosition, cameraPosition + cameraDirection, worldUp);
 
-	// vec4 lightStartPosition = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-	// lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
+	vec4 lightStartPosition = vec4(40.0f, 40.0f, 0.0f, 1.0f);
+	//lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
+	mat4 lightViewMatrix = lookAt(lightPosition, vec3(0.0f), worldUp);
+	mat4 lightProjMatrix = perspective(radians(45.0f), 1.0f, 25.0f, 100.0f);
 
 	// Draw from camera
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -280,13 +287,13 @@ void display(void)
 	glClearColor(0.2f, 0.2f, 0.8f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	cloudTime += deltaTime * cloudMovementSpeed;
+	{
+		labhelper::perf::Scope s("Scene");
+		drawScene(raymarchingProgram, viewMatrix, projMatrix);
+	}
 
-	// Draw the scene
-	drawScene(raymarchingProgram, viewMatrix, projMatrix);
-
-	// Draw the solid geometry (the planet)
-	drawSolidGeometry(rasterizationProgram, viewMatrix, projMatrix);
+	drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
+	debugDrawLight(viewMatrix, projMatrix, vec3(lightPosition));
 }
 
 // This function is used to update the scene according to user input
@@ -453,6 +460,8 @@ int main(int argc, char* argv[])
 		// Swap front and back buffer. This frame will now been displayed.
 		SDL_GL_SwapWindow(g_window);
 	}
+
+	labhelper::freeModel(planetModel);
 
 	// Shut down everything. This includes the window and all other subsystems.
 	labhelper::shutDown(g_window);
