@@ -33,8 +33,12 @@ int windowWidth, windowHeight;
 // Mouse input
 bool g_doMouseLookaround = false;
 
+// This will identify our VBO for the planet
+GLuint vertexArrayObject;
+
 // Shader programs
 GLuint raymarchingProgram;
+GLuint rasterizationProgram;
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
@@ -83,6 +87,12 @@ void loadShaders(bool is_reload)
 	{
 		raymarchingProgram = shader;
 	}
+
+	GLuint shader2 = labhelper::loadShaderProgram("../project/simple.vert", "../project/simple.frag", is_reload);
+	if (shader2 != 0)
+	{
+		rasterizationProgram = shader2;
+	}
 }
 
 void loadNoiseTexture(const std::string& filepath)
@@ -107,19 +117,73 @@ void loadNoiseTexture(const std::string& filepath)
 	stbi_image_free(data);
 }
 
+void initializePlanet() {
+	ENSURE_INITIALIZE_ONLY_ONCE();
+	const float positions[] = {
+		//	 X      Y     Z
+		0.0f,  0.5f,  1.0f, // v0
+		-0.5f, -0.5f, 1.0f, // v1
+		0.5f,  -0.5f, 1.0f  // v2
+	};
+
+
+	// Create a handle for the position vertex buffer object
+	// See OpenGL Spec �2.9 Buffer Objects
+	// - http://www.cse.chalmers.se/edu/course/TDA361/glspec30.20080923.pdf#page=54
+	GLuint positionBuffer;
+	glGenBuffers(1, &positionBuffer);
+	// Set the newly created buffer as the current one
+	glBindBuffer(GL_ARRAY_BUFFER, positionBuffer);
+	// Send the vertex position data to the current buffer
+	glBufferData(GL_ARRAY_BUFFER, 9 * sizeof(float), positions,
+		GL_STATIC_DRAW);
+
+	const float colors[] = {
+		//   R     G     B
+		1.0f, 0.0f, 0.0f, // White
+		0.0f, 1.0f, 0.0f, // White
+		0.0f, 0.0f, 1.0f  // White
+	};
+	// Create a handle for the vertex color buffer
+	GLuint colorBuffer;
+	glGenBuffers(1, &colorBuffer);
+	// Set the newly created buffer as the current one
+	glBindBuffer(GL_ARRAY_BUFFER, colorBuffer);
+	// Send the vertex color data to the current buffer
+	glBufferData(GL_ARRAY_BUFFER, 9 * sizeof(float), colors, GL_STATIC_DRAW);
+
+	glGenVertexArrays(1, &vertexArrayObject);
+	// Bind the vertex array object
+	// The following calls will affect this vertex array object.
+	glBindVertexArray(vertexArrayObject);
+	// Makes positionBuffer the current array buffer for subsequent calls.
+	glBindBuffer(GL_ARRAY_BUFFER, positionBuffer);
+	// Attaches positionBuffer to vertexArrayObject, in the 0th attribute location
+	glVertexAttribPointer(0, 3, GL_FLOAT, false /*normalized*/, 0 /*stride*/, 0 /*offset*/);
+	// Makes colorBuffer the current array buffer for subsequent calls.
+	glBindBuffer(GL_ARRAY_BUFFER, colorBuffer);
+	// Attaches colorBuffer to vertexArrayObject, in the 1st attribute location
+	glVertexAttribPointer(1, 3, GL_FLOAT, false /*normalized*/, 0 /*stride*/, 0 /*offset*/);
+	glEnableVertexAttribArray(0); // Enable the vertex position attribute
+	glEnableVertexAttribArray(1);
+}
+
 // This function is called once at the start of the program and never again
 void initialize()
 {
 	ENSURE_INITIALIZE_ONLY_ONCE();
-
+	
 	// Load Shaders
 	loadShaders(false);
 
 	// Load noise texture
 	loadNoiseTexture("../textures/noise.png");
 
-	glEnable(GL_DEPTH_TEST); // enable Z-buffering
-	glEnable(GL_CULL_FACE);	 // enables backface culling
+	//glEnable(GL_DEPTH_TEST); // enable Z-buffering
+	//glEnable(GL_CULL_FACE);	 // enables backface culling
+
+	initializePlanet();
+
 }
 
 // This function is used to draw the main objects on the scene
@@ -176,6 +240,15 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::drawFullScreenQuad();
 }
 
+void drawSolidGeometry(GLuint currentShaderProgram, const mat4& viewMatrix, mat4& projectionMatrix) {
+	glUseProgram(currentShaderProgram);
+	labhelper::setUniformSlow(currentShaderProgram, "triangleColor", glm::vec3(1, 1, 1));
+	glBindVertexArray(vertexArrayObject);
+	// Submit triangles from currently bound vertex array object.
+	glDrawArrays(GL_TRIANGLES, 0, 3); // Render 1 triangle
+	glUseProgram(0);
+}
+
 // This function will be called once per frame, so the code to set up
 // the scene for rendering should go here
 void display(void)
@@ -191,8 +264,8 @@ void display(void)
 		{
 			windowWidth = w;
 			windowHeight = h;
-		}
-	}
+		}	
+	}	
 
 	// setup matrices
 	mat4 projMatrix = perspective(radians(45.0f), float(windowWidth) / float(windowHeight), 5.0f, 2000.0f);
@@ -211,6 +284,9 @@ void display(void)
 
 	// Draw the scene
 	drawScene(raymarchingProgram, viewMatrix, projMatrix);
+
+	// Draw the solid geometry (the planet)
+	drawSolidGeometry(rasterizationProgram, viewMatrix, projMatrix);
 }
 
 // This function is used to update the scene according to user input
@@ -367,7 +443,7 @@ int main(int argc, char* argv[])
 
 		// render to window
 		display();
-
+		
 		// Render overlay GUI.
 		gui();
 

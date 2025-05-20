@@ -3,11 +3,15 @@
 // required by GLSL spec Sect 4.5.3 (though nvidia does not, amd does)
 precision highp float;
 
-uniform vec3 material_color;
+// Task 3: Add an input variable for colors from the vertex shader
 
 layout(location = 0) out vec4 fragmentColor;
+in vec3 color;
 
+// Task 5: Add a uniform to tint all the pixels by some color
+uniform vec3 triangleColor = vec3(1, 1, 1);
 void main()
 {
-	fragmentColor = vec4(material_color, 1.0);
+// Task 3: Set the output color to be the incoming interpolated color received
+	fragmentColor.rgb = color * triangleColor.rgb;
 }
