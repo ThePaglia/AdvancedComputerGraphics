@@ -100,6 +100,7 @@ void main()
 	float visibility = 1.0;
 	float attenuation = 1.0;
 
+	// TODO: Figure out why visibility is not correctly calculated
 	visibility = textureProj(shadowMapTex, shadowMapCoord);
 		
 	if(useSoftFalloff == 1) {
