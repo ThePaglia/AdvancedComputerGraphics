@@ -433,6 +433,8 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 void main() {
     sunDirection = normalize(lightPosition);
 
+    // Next, we must construct the correct ray direction from the same view projection matrix that the rasterized geometry uses
+
     // 1. Normalized Device Coordinates (NDC)
     vec2 normalizedDeviceCoordinates = (gl_FragCoord.xy / uResolution.xy) * 2.0 - 1.0;
 
