@@ -52,6 +52,7 @@ vec3 cameraPosition(0.0f, 0.0f, -30);
 vec3 cameraDirection = normalize(vec3(0.0f) + cameraPosition);
 vec3 cameraRight = cross(cameraDirection, worldUp);
 vec3 cameraUp = cross(cameraRight, cameraDirection);
+mat4 viewProjMatrix;
 
 // Model parameters
 labhelper::Model* planetModel = nullptr;
@@ -136,7 +137,7 @@ void loadNoiseTexture(const std::string& filepath)
 
 void initializePlanet() {
 	planetModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
-	planetModelMatrix = translate(-50.0f * vec3(0, 0, 1));
+	planetModelMatrix = scale(vec3(10));
 }
 
 // This function is called once at the start of the program and never again
@@ -208,6 +209,7 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraDir", cameraDirection);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraUp", cameraUp);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraRight", cameraRight);
+	labhelper::setUniformSlow(currentShaderProgram, "uViewProjectionMatrix", viewProjMatrix);
 
 	labhelper::drawFullScreenQuad();
 }
@@ -275,11 +277,15 @@ void display(void)
 	}
 
 	// setup matrices
-	mat4 projMatrix = perspective(radians(45.0f), float(windowWidth) / float(windowHeight), 5.0f, 2000.0f);
-	mat4 viewMatrix = lookAt(cameraPosition, cameraPosition + cameraDirection, worldUp);
+	mat4 projMatrix = perspective(radians(45.0f), float(windowWidth) / float(windowHeight), 1.0f, 2000.0f);
+	mat3 cameraBaseVectorsWorldSpace(cameraRight, cameraUp, cameraDirection);
+	mat4 cameraRotation = mat4(transpose(cameraBaseVectorsWorldSpace)); // NOTE: this is also calculated in the raymarching shader, perhaps we can just send the result there?
+	mat4 viewMatrix = cameraRotation * translate(-cameraPosition);
+	viewProjMatrix = projMatrix * viewMatrix;
+	//viewMatrix = lookAt(cameraPosition, cameraPosition - cameraDirection, worldUp);
 
 	vec4 lightStartPosition = vec4(40.0f, 40.0f, 0.0f, 1.0f);
-	//lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
+	lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
 	mat4 lightViewMatrix = lookAt(lightPosition, vec3(0.0f), worldUp);
 	mat4 lightProjMatrix = perspective(radians(45.0f), 1.0f, 25.0f, 100.0f);
 
@@ -444,6 +450,7 @@ int main(int argc, char* argv[])
 		previousTime = currentTime;
 		currentTime = timeSinceStart.count();
 		deltaTime = currentTime - previousTime;
+		cloudTime += deltaTime * cloudMovementSpeed;
 
 		// check events (keyboard among other)
 		stopRendering = handleEvents();

@@ -11,6 +11,7 @@ uniform vec3 uCameraPos;
 uniform vec3 uCameraRight;
 uniform vec3 uCameraUp;
 uniform vec3 uCameraDir;
+uniform mat4 uViewProjectionMatrix;
 
 // Light
 uniform vec3 pointLightColor;
@@ -167,7 +168,7 @@ bool intersectBox(vec3 ro, vec3 rd, vec3 boxMin, vec3 boxMax, out float tEnter, 
 }
 
 bool intersectSphere(vec3 ro, vec3 rd, vec3 sc, float sr, out float tEnter, out float tExit) {
-    vec3 oc = ro + sc;
+    vec3 oc = ro - sc;
     float b = dot(oc, rd);
     float c = dot(oc, oc) - sr * sr;
     float h = b * b - c;
@@ -431,21 +432,29 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
 void main() {
     sunDirection = normalize(lightPosition);
-	mat3 uCameraMatrix = transpose(mat3(uCameraRight, uCameraUp, uCameraDir));
-	vec2 uv = gl_FragCoord.xy / uResolution.xy;
-	uv -= 0.5;
-	uv.x *= uResolution.x / uResolution.y;
-	
-	// Ray Origin - camera
-	vec3 rayOrigin = uCameraPos;
-	// Ray Direction
-	vec3 rayDirection = normalize(vec3(uv, -1.0) * uCameraMatrix);
 
-	vec3 color = vec3(0.0);
-	float blueNoise = texture2D(uBlueNoise, gl_FragCoord.xy / 100).r;
-	float offset = fract(blueNoise);
-	vec4 res = raymarch(rayOrigin, rayDirection, uCameraDir, offset * 0.1f);
-	color = res.rgb;
+    // 1. Normalized Device Coordinates (NDC)
+    vec2 normalizedDeviceCoordinates = (gl_FragCoord.xy / uResolution.xy) * 2.0 - 1.0;
 
-	fragmentColor = vec4(color, 1.0);
+    // 2. Create clip-space position
+    vec4 clip = vec4(normalizedDeviceCoordinates, -1.0, 1.0); // z = -1 for near plane, w = 1
+
+    // 3. Transform by inverse of viewProjectionMatrix to get world-space position
+    vec4 worldPos = inverse(uViewProjectionMatrix) * clip;
+    worldPos /= worldPos.w;
+
+    // 4. Ray origin is camera position
+    vec3 rayOrigin = uCameraPos;
+
+    // 5. Ray direction from camera to worldPos
+    vec3 rayDirection = normalize(worldPos.xyz - rayOrigin);
+
+    // 6. Raymarching
+    vec3 color = vec3(0.0);
+    float blueNoise = texture2D(uBlueNoise, gl_FragCoord.xy / 100.0).r;
+    float offset = fract(blueNoise);
+    vec4 res = raymarch(rayOrigin, rayDirection, uCameraDir, offset * 0.1);
+    color = res.rgb;
+
+    fragmentColor = vec4(color, 1.0);
 }
