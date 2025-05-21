@@ -86,42 +86,7 @@ vec3 calculateDirectIllumiunation(vec3 wo, vec3 n, vec3 base_color)
 	vec3 diffuse_term = base_color * (1.0 / PI) * dot(n, wi) * Li;
 	direct_illum = diffuse_term;
 
-	///////////////////////////////////////////////////////////////////////////
-	// Task 2 - Calculate the Torrance Sparrow BRDF and return the light
-	//          reflected from that instead
-	///////////////////////////////////////////////////////////////////////////
-	
-	vec3 wh = normalize(wi + wo);
-	float s = material_shininess;
-	float R0 = material_fresnel;
-
-	// Utility variables
-	float nDOTwh = max(dot(n, wh), 0.001);
-	float nDOTwo = max(dot(n, wo), 0.001);
-	float nDOTwi = max(dot(n, wi), 0.001);
-	float woDOTwh = dot(wo, wh);
-
-	float F = R0 + (1 - R0) * pow(1 - dot(wh, wi), 5);
-
-	float D = ((s + 2) / (2 * PI)) * pow(nDOTwh, s);
-
-	float G =	min(1, 
-				min(2 * nDOTwh * nDOTwo / woDOTwh, 
-					2 * nDOTwh * nDOTwi / woDOTwh));
-
-	float brdf = (F * D * G) / (4 * nDOTwo * nDOTwi);
-	
-	//direct_illum = brdf * nDOTwi * Li;
-
-	///////////////////////////////////////////////////////////////////////////
-	// Task 3 - Make your shader respect the parameters of our material model.
-	///////////////////////////////////////////////////////////////////////////
-
-	vec3 dielectric_term = brdf * nDOTwi * Li + (1 - F) * diffuse_term;
-	vec3 metal_term = brdf * base_color * nDOTwi * Li;
-	direct_illum = material_metalness * metal_term + (1 - material_metalness) * dielectric_term;
-
-	return direct_illum;
+	return pow(direct_illum, vec3(1.0 / 2.2));
 }
 
 vec3 calculateIndirectIllumination(vec3 wo, vec3 n, vec3 base_color)

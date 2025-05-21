@@ -71,7 +71,7 @@ bool animateLight = false;
 vec3 pointLightColor = vec3(1.0f);
 float innerSpotlightAngle = 17.5f;
 float outerSpotlightAngle = 22.5f;
-float point_light_intensity_multiplier = 10000.0f;
+float point_light_intensity_multiplier = 5000.0f;
 
 // Sampling parameters
 float samplingIncreaseFactor = 20.0f;
@@ -532,7 +532,7 @@ void gui()
 	ImGui::SliderFloat3("Scattering Wavelengths", (float*)&colorBandWavelengths, 0, 1000);
 	ImGui::SliderFloat("Scattering Strength", &atmosphereScatteringStrength, 0, 10);
 	ImGui::Checkbox("Animate light", &animateLight);
-	ImGui::SliderFloat3("Sun Position", (float*)&lightPosition, -50, 50);
+	ImGui::SliderFloat3("Sun Position", (float*)&lightPosition, -200, 200);
 	ImGui::Text("Controls");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
 	labhelper::perf::drawEventsWindow();
