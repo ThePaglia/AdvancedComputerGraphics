@@ -155,7 +155,6 @@ void initialize()
 
 	glEnable(GL_DEPTH_TEST); // enable Z-buffering
 	glEnable(GL_CULL_FACE);  // enables backface culling
-
 }
 
 // This function is used to draw the main objects on the scene
@@ -164,6 +163,7 @@ void drawScene(GLuint currentShaderProgram,
 	const mat4& projectionMatrix)
 {
 	glUseProgram(currentShaderProgram);
+	glFrontFace(GL_CCW); // The drawing order is flipped for the full-screen quad used for raymarching
 
 	// Bind the noise texture
 	glActiveTexture(GL_TEXTURE0);
@@ -220,23 +220,7 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	const mat4& lightViewMatrix, 
 	const mat4& lightProjectionMatrix) {
 	glUseProgram(currentShaderProgram);
-
-	// Light source
-	vec4 viewSpaceLightPosition = viewMatrix * vec4(lightPosition, 1.0f);
-	labhelper::setUniformSlow(currentShaderProgram, "point_light_color", vec3(1));
-	labhelper::setUniformSlow(currentShaderProgram, "point_light_intensity_multiplier",
-		1);
-	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightPosition", vec3(viewSpaceLightPosition));
-	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightDir",
-		normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
-
-
-	// Environment
-	labhelper::setUniformSlow(currentShaderProgram, "environment_multiplier", 1);
-
-	// camera
-	labhelper::setUniformSlow(currentShaderProgram, "viewInverse", inverse(viewMatrix));
-
+	glFrontFace(GL_CW); // The models are rendered inside out so we flip what is considered to be the front face
 	// landing pad
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
 		projectionMatrix * viewMatrix * planetModelMatrix);
@@ -244,7 +228,7 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
 		inverse(transpose(viewMatrix * planetModelMatrix)));
 
-	labhelper::render(planetModel, false);
+	labhelper::render(planetModel);
 }
 
 void debugDrawLight(const glm::mat4& viewMatrix,
