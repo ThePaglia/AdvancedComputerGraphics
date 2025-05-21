@@ -66,8 +66,8 @@ GLuint noiseTexture;
 ///////////////////////////////////////////////////////////////////////////////
 // Light source
 ///////////////////////////////////////////////////////////////////////////////
-vec3 lightPosition = vec3(0.0f, 1.0f, 0.0f);
-bool animateLight = true;
+vec3 lightPosition = vec3(0.0f, 100.0f, 0.0f);
+bool animateLight = false;
 vec3 pointLightColor = vec3(1.0f);
 float innerSpotlightAngle = 17.5f;
 float outerSpotlightAngle = 22.5f;
@@ -113,6 +113,11 @@ bool useSoftFalloff = false;
 bool useHardwarePCF = false;
 float polygonOffset_factor = 1.0f;
 float polygonOffset_units = 5000.0f;
+
+// Render textures, these are rendered to in the rasterizer step, and the result is used in the ray marching shader
+FboInfo rasterizedFBO;
+GLuint colorTex;
+GLuint depthTex;
 
 void loadShaders(bool is_reload)
 {
@@ -175,8 +180,8 @@ void initialize()
 	// Load noise texture
 	loadNoiseTexture("../textures/noise.png");
 
+	// Shadow map
 	shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
-
 	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
@@ -194,9 +199,9 @@ void drawScene(GLuint currentShaderProgram,
 	glFrontFace(GL_CCW); // The drawing order is flipped for the full-screen quad used for raymarching
 
 	// Bind the noise texture
-	glActiveTexture(GL_TEXTURE0);
+	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, noiseTexture);
-	labhelper::setUniformSlow(currentShaderProgram, "uNoiseTexture", 0);
+	labhelper::setUniformSlow(currentShaderProgram, "uNoiseTexture", 2);
 
 	// Light source
 	labhelper::setUniformSlow(currentShaderProgram, "pointLightColor", pointLightColor);
@@ -295,7 +300,6 @@ void display(void)
 	labhelper::perf::Scope s("Display");
 
 	// Check if window size has changed and resize buffers as needed
-
 	{
 		int w, h;
 		SDL_GetWindowSize(g_window, &w, &h);
@@ -303,11 +307,12 @@ void display(void)
 		{
 			windowWidth = w;
 			windowHeight = h;
+			rasterizedFBO.resize(w, h);
 		}
 	}
 
 	// setup matrices
-	mat4 projMatrix = perspective(radians(45.0f), float(windowWidth) / float(windowHeight), 1.0f, 2000.0f);
+	mat4 projMatrix = perspective(radians(45.0f), float(windowWidth) / float(windowHeight), 0.01f, 1000.0f);
 	mat3 cameraBaseVectorsWorldSpace(cameraRight, cameraUp, cameraDirection);
 	mat4 cameraRotation = mat4(transpose(cameraBaseVectorsWorldSpace)); // NOTE: this is also calculated in the raymarching shader, perhaps we can just send the result there?
 	mat4 viewMatrix = cameraRotation * translate(-cameraPosition);
@@ -374,19 +379,32 @@ void display(void)
 		glDisable(GL_POLYGON_OFFSET_FILL);
 	}
 
-	// Draw from camera
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glViewport(0, 0, windowWidth, windowHeight);
-	glClearColor(0.2f, 0.2f, 0.8f, 1.0f);
+	// Draw to fbo from camera
+	glBindFramebuffer(GL_FRAMEBUFFER, rasterizedFBO.framebufferId);
+	glViewport(0, 0, rasterizedFBO.width, rasterizedFBO.height);
+	glClearColor(0, 0, 0, 0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
+	debugDrawLight(viewMatrix, projMatrix, vec3(lightPosition));
 
 	{
-		labhelper::perf::Scope s("Scene");
+		labhelper::perf::Scope s("Ray Marching");
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		// Bind the raymarch shader
+		glUseProgram(raymarchingProgram);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, rasterizedFBO.colorTextureTargets[0]);
+		glUniform1i(glGetUniformLocation(raymarchingProgram, "uSceneColor"), 0);
+
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, rasterizedFBO.depthBuffer);
+		glUniform1i(glGetUniformLocation(raymarchingProgram, "uSceneDepth"), 1);
+
 		drawScene(raymarchingProgram, viewMatrix, projMatrix);
 	}
 
-	drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
-	debugDrawLight(viewMatrix, projMatrix, vec3(lightPosition));
 }
 
 // This function is used to update the scene according to user input

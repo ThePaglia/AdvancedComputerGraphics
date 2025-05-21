@@ -1,10 +1,18 @@
 #version 420
 
+in vec2 vUV;
 layout(location = 0) out vec4 fragmentColor;
 
 uniform float uTime;
 uniform vec2 uResolution;
+uniform sampler2D uSceneColor; // Result from rasterization step
+uniform sampler2D uSceneDepth; // Result from rasterization step
 uniform sampler2D uNoiseTexture;
+
+// These are values retrieved from the previous rasterized step
+vec3 sceneColor;
+float sceneDepth;
+vec3 scenePoint;
 
 // Camera
 uniform vec3 uCameraPos;
@@ -24,7 +32,6 @@ const float ambientIntensity = 0.9f;
 uniform float cloudTime = 1.0f;
 uniform float cloudShadowIntensity = 4f;
 uniform float cloudShadowCutoff = 0.5f;
-
 
 // Raymarching
 #define MAX_STEPS 500
@@ -276,21 +283,18 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     float rayDotCloudPlane = dot(rayDirection, normalize(rayDirection * vec3(1, 0, 1)));
     float distCamCloudPlane = abs(rayOrigin.y - cloudHeight);
 
-    vec4 opaqueRes = vec4(0.0);
+    vec4 opaqueRes = vec4(sceneColor, 1);
 
     // Calculate the pixel contribution of opaque geometry
-    float opaqueDepth = 0;
-    vec3 opaquePoint = vec3(0);
-    if(raymarchSDF(rayOrigin, rayDirection, MAX_STEPS, MAX_MARCH_DISTANCE, opaqueDepth, opaquePoint)) {
-        vec3 normal = calculateNormal(opaquePoint);
-        float diffuseIntensity = clamp(dot(sunDirection, normal), 0, 1);
-
+    vec3 opaquePoint = vec3(scenePoint);
+    float opaqueDepth = length(rayOrigin - opaquePoint);
+    if(sceneColor != vec3(0)) {
         float cloudDensityAbove = 0;
 
         // Calculate cloud density above (i.e. in the sun's direction) this point
         float tEnterInner, tExitInner;
         int numShadowSteps = 8;
-        if(diffuseIntensity > 0 && intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner)) {
+        if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner)) {
             float tEnterOuter, tExitOuter;
             if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterOuter, tExitOuter)) {
                 float rayLength = tExitOuter - tExitInner;
@@ -307,10 +311,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
         cloudDensityAbove *= cloudShadowIntensity;
 
-        opaqueRes = mix(vec4(0, 0, 0, 1), vec4(0.01f, 0.2f, 1.0f, 1.0f), diffuseIntensity);
-        opaqueRes.rgb *= pointLightColor * pointLightIntensityMultiplier;
         opaqueRes.rgb *= clamp(1 - cloudDensityAbove, cloudShadowCutoff, 1.0);
-        opaqueRes = pow(opaqueRes, vec4(1 / 2.2f)); // Gamma correction
     }
 
     // Calculate the atmosphere lighting contribution
@@ -431,25 +432,33 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 }
 
 void main() {
+    vec2 uv = gl_FragCoord.xy / uResolution.xy;
+    sceneColor = texture(uSceneColor, uv).rgb;
+    float depth = texture(uSceneDepth, uv).r;
+
     sunDirection = normalize(lightPosition);
 
     // Next, we must construct the correct ray direction from the same view projection matrix that the rasterized geometry uses
 
     // 1. Normalized Device Coordinates (NDC)
-    vec2 normalizedDeviceCoordinates = (gl_FragCoord.xy / uResolution.xy) * 2.0 - 1.0;
+    vec2 normalizedDeviceCoordinates = uv * 2.0 - 1.0;
 
     // 2. Create clip-space position
-    vec4 clip = vec4(normalizedDeviceCoordinates, -1.0, 1.0); // z = -1 for near plane, w = 1
+    float z = depth * 2.0 - 1.0;
+    vec4 clipSpacePos = vec4(normalizedDeviceCoordinates, z, 1.0);
 
     // 3. Transform by inverse of viewProjectionMatrix to get world-space position
-    vec4 worldPos = inverse(uViewProjectionMatrix) * clip;
-    worldPos /= worldPos.w;
+    vec4 worldPoint = inverse(uViewProjectionMatrix) * clipSpacePos;
+    worldPoint /= worldPoint.w;
+    // Store the scene point as a vec3, as we no longer need information about w
+    scenePoint = vec3(worldPoint);
+    sceneDepth = length(scenePoint - uCameraPos);
 
     // 4. Ray origin is camera position
     vec3 rayOrigin = uCameraPos;
 
     // 5. Ray direction from camera to worldPos
-    vec3 rayDirection = normalize(worldPos.xyz - rayOrigin);
+    vec3 rayDirection = normalize(scenePoint.xyz - rayOrigin);
 
     // 6. Raymarching
     vec3 color = vec3(0.0);
