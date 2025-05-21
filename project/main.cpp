@@ -163,8 +163,8 @@ void loadNoiseTexture(const std::string& filepath)
 }
 
 void initializePlanet() {
-	planetModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
-	planetModelMatrix = scale(vec3(10));
+	planetModel = labhelper::loadModelFromOBJ("../scenes/planet.obj");
+	planetModelMatrix = scale(vec3(9));
 }
 
 // This function is called once at the start of the program and never again
