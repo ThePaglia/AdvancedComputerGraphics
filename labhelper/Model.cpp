@@ -528,7 +528,7 @@ namespace labhelper
 				setUniformSlow(current_program, "material_metalness", material.m_metalness);
 				setUniformSlow(current_program, "material_fresnel", material.m_fresnel);
 				setUniformSlow(current_program, "material_shininess", material.m_shininess);
-				setUniformSlow(current_program, "material_emission", material.m_emission);
+				setUniformSlow(current_program, "material_emission", glm::vec3(0));
 
 				// Actually unused in the labs
 				setUniformSlow(current_program, "has_reflectivity_texture", has_reflectivity_texture);
