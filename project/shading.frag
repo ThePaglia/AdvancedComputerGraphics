@@ -19,18 +19,10 @@ uniform int has_emission_texture;
 layout(binding = 5) uniform sampler2D emissiveMap;
 
 ///////////////////////////////////////////////////////////////////////////////
-// Environment
+// Directional light source (Sun)
 ///////////////////////////////////////////////////////////////////////////////
-layout(binding = 6) uniform sampler2D environmentMap;
-layout(binding = 7) uniform sampler2D irradianceMap;
-layout(binding = 8) uniform sampler2D reflectionMap;
-uniform float environment_multiplier;
-
-///////////////////////////////////////////////////////////////////////////////
-// Light source
-///////////////////////////////////////////////////////////////////////////////
-uniform vec3 point_light_color = vec3(1.0, 1.0, 1.0);
-uniform float point_light_intensity_multiplier = 50.0;
+uniform vec3 directional_light_color = vec3(1.0, 1.0, 1.0);
+uniform float directional_light_intensity_multiplier = 50.0;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Constants
@@ -49,6 +41,7 @@ in vec3 viewSpacePosition;
 ///////////////////////////////////////////////////////////////////////////////
 uniform mat4 viewInverse;
 uniform vec3 viewSpaceLightPosition;
+uniform vec3 planetOrigin = vec3(0, 0, 0);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Output color
@@ -59,40 +52,39 @@ layout(location = 0) out vec4 fragmentColor;
 in vec4 shadowMapCoord;
 layout(binding = 10) uniform sampler2DShadow shadowMapTex;
 uniform vec3 viewSpaceLightDir;
-uniform float spotOuterAngle;
-uniform float spotInnerAngle;
-uniform int useSoftFalloff;
 
 
 vec3 calculateDirectIllumiunation(vec3 wo, vec3 n, vec3 base_color)
 {
 	vec3 direct_illum = base_color;
-	///////////////////////////////////////////////////////////////////////////
-	// Task 1.2 - Calculate the radiance Li from the light, and the direction
-	//            to the light. If the light is backfacing the triangle,
-	//            return vec3(0);
-	///////////////////////////////////////////////////////////////////////////
-	const float distance_to_light = length(viewSpaceLightPosition - viewSpacePosition);
-	const float falloff_factor = 1.0 / (distance_to_light * distance_to_light);
-	vec3 Li = point_light_intensity_multiplier * point_light_color * falloff_factor;
+
+	// Directional light term (the sun), distance is not relevant here
+	vec3 Li = directional_light_intensity_multiplier * directional_light_color;
 	vec3 wi = normalize(viewSpaceLightPosition - viewSpacePosition);
 	if(dot(wi, n) <= 0.0)
 		return vec3(0.0);
-
-	///////////////////////////////////////////////////////////////////////////
-	// Task 1.3 - Calculate the diffuse term and return that as the result
-	///////////////////////////////////////////////////////////////////////////
 	
 	vec3 diffuse_term = base_color * (1.0 / PI) * dot(n, wi) * Li;
 	direct_illum = diffuse_term;
 
+	// Apply gamma correction
 	return pow(direct_illum, vec3(1.0 / 2.2));
 }
 
 vec3 calculateIndirectIllumination(vec3 wo, vec3 n, vec3 base_color)
 {
-	// TODO: Add indirect lighting according to the planet's normal at this point
-	return vec3(0.0);
+	// The position of this fragment in world space
+	vec3 worldPoint = vec3(viewInverse * vec4(viewSpacePosition, 1));
+	// The direction from the planet's center towards this fragment in world space
+	vec3 planetNormal = normalize(worldPoint - planetOrigin);
+	// The direction of the sun in world space
+	vec3 worldSunDirection = normalize(vec3(viewInverse * vec4(viewSpaceLightDir, 0)));
+
+	// The indirect illumination (i.e. shadow strength) is scaled by where the fragment is on the planet
+	// This acts similar to lighting a perfect sphere diffusely
+	float diffuse = max(dot(planetNormal, -worldSunDirection), 0);
+
+	return base_color * diffuse;
 }
 
 void main()
@@ -102,15 +94,6 @@ void main()
 
 	// TODO: Figure out why visibility is not correctly calculated
 	visibility = textureProj(shadowMapTex, shadowMapCoord);
-		
-	if(useSoftFalloff == 1) {
-		vec3 posToLight = normalize(viewSpaceLightPosition - viewSpacePosition);
-		float cosAngle = dot(posToLight, -viewSpaceLightDir);
-
-		// Spotlight with hard border:
-		float spotAttenuation = smoothstep(spotOuterAngle, spotInnerAngle, cosAngle);
-		visibility *= spotAttenuation;
-	}
 
 	vec3 wo = -normalize(viewSpacePosition);
 	vec3 n = normalize(viewSpaceNormal);

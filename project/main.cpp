@@ -70,10 +70,8 @@ GLuint noiseTexture;
 ///////////////////////////////////////////////////////////////////////////////
 vec3 lightPosition = vec3(20, 40, 0);
 bool animateLight = true;
-vec3 pointLightColor = vec3(1.0f);
-float innerSpotlightAngle = 17.5f;
-float outerSpotlightAngle = 22.5f;
-float point_light_intensity_multiplier = 5000.0f;
+vec3 directionalLightColor = vec3(1.0f);
+float directionalLightIntensityMultiplier = 2.0f;
 
 // Sampling parameters
 float samplingIncreaseFactor = 20.0f;
@@ -90,7 +88,7 @@ float cloudScale = 0.72f;
 float cloudStepMin = 0.01f;
 float cloudStepMax = 0.46f;
 float cloudShadowIntensity = 3.0f;
-float cloudShadowCutoff = 0.1f;
+float cloudShadowCutoff = 0.5f;
 float cloudLightingFalloff = 0.5f;
 float atmosphereDepth = 5.6f;
 float atmosphereDensityFalloff = 5.5f;
@@ -111,7 +109,6 @@ int shadowMapResolution = 4096;
 int shadowMapClampMode = ClampMode::Border;
 bool shadowMapClampBorderShadowed = false;
 bool usePolygonOffset = true;
-bool useSoftFalloff = true;
 bool useHardwarePCF = true;
 float polygonOffset_factor = 2.0f;
 float polygonOffset_units = 30000.0f;
@@ -208,8 +205,8 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "uNoiseTexture", 2);
 
 	// Light source
-	labhelper::setUniformSlow(currentShaderProgram, "pointLightColor", pointLightColor);
-	labhelper::setUniformSlow(currentShaderProgram, "pointLightIntensityMultiplier",
+	labhelper::setUniformSlow(currentShaderProgram, "directionalLightColor", directionalLightColor);
+	labhelper::setUniformSlow(currentShaderProgram, "directionalLightIntensityMultiplier",
 		pointLightIntensityMultiplier);
 	labhelper::setUniformSlow(currentShaderProgram, "lightPosition", lightPosition);
 
@@ -258,7 +255,7 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	const mat4& lightProjectionMatrix) {
 	glUseProgram(currentShaderProgram);
 	if (currentShaderProgram == depthProgram) {
-		glFrontFace(GL_CCW); // depthProgram requires CCW vertex order for some reason
+		glFrontFace(GL_CCW); // depthProgram requires CCW vertex order for some reason, this way it properly renders the forward facing faces
 	}
 	else {
 		glFrontFace(GL_CW); // The models are rendered inside out so we flip what is considered to be the front face
@@ -266,16 +263,15 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 
 	// Light source
 	vec4 viewSpaceLightPosition = viewMatrix * vec4(lightPosition, 1.0f);
-	labhelper::setUniformSlow(currentShaderProgram, "point_light_color", pointLightColor);
-	labhelper::setUniformSlow(currentShaderProgram, "point_light_intensity_multiplier",
-		point_light_intensity_multiplier);
+	labhelper::setUniformSlow(currentShaderProgram, "directional_light_color", directionalLightColor);
+	labhelper::setUniformSlow(currentShaderProgram, "directional_light_intensity_multiplier",
+		directionalLightIntensityMultiplier);
 	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightPosition", vec3(viewSpaceLightPosition));
 	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightDir",
 		normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
-	labhelper::setUniformSlow(currentShaderProgram, "spotOuterAngle", std::cos(radians(outerSpotlightAngle)));
-	labhelper::setUniformSlow(currentShaderProgram, "spotInnerAngle", std::cos(radians(innerSpotlightAngle)));
-	labhelper::setUniformSlow(currentShaderProgram, "useSpotLight", 1);
-	labhelper::setUniformSlow(currentShaderProgram, "useSoftFalloff", useSoftFalloff ? 1 : 0);
+
+	// Camera
+	labhelper::setUniformSlow(currentShaderProgram, "viewInverse", inverse(viewMatrix));
 
 	glActiveTexture(GL_TEXTURE10);
 	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
@@ -574,9 +570,6 @@ void gui()
 	ImGui::RadioButton("Clamp to edge", &shadowMapClampMode, ClampMode::Edge);
 	ImGui::RadioButton("Clamp to border", &shadowMapClampMode, ClampMode::Border);
 	ImGui::Checkbox("Border as shadow", &shadowMapClampBorderShadowed);
-	ImGui::Checkbox("Use soft falloff", &useSoftFalloff);
-	ImGui::SliderFloat("Inner Deg.", &innerSpotlightAngle, 0.0f, 90.0f);
-	ImGui::SliderFloat("Outer Deg.", &outerSpotlightAngle, 0.0f, 90.0f);
 	ImGui::Checkbox("Use hardware PCF", &useHardwarePCF);
 	labhelper::perf::drawEventsWindow();
 }

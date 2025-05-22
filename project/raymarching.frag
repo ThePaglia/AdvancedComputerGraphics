@@ -22,9 +22,9 @@ uniform vec3 uCameraDir;
 uniform mat4 uViewProjectionMatrix;
 
 // Light
-uniform vec3 pointLightColor;
+uniform vec3 directionalLightColor;
 uniform vec3 lightPosition;
-uniform float pointLightIntensityMultiplier;
+uniform float directionalLightIntensityMultiplier;
 
 // Cloud
 const vec3 ambientColor = vec3(0.60, 0.60, 0.75);
@@ -389,7 +389,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
                 float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection)) / 0.3, 0.0, 1.0);
                 // TODO: Make cloud color reflect the incoming sunlight's color, i.e. a nice orange/red at glancing angles
-                vec3 lin = ambientColor * ambientIntensity + pointLightIntensityMultiplier * pointLightColor * diffuse;
+                vec3 lin = ambientColor * ambientIntensity + directionalLightIntensityMultiplier * directionalLightColor * diffuse;
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
                 color.rgb *= lin;
                 color.rgb *= color.a;
