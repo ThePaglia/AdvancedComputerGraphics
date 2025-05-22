@@ -60,7 +60,7 @@ mat4 planetModelMatrix;
 labhelper::Model* landingpadModel = nullptr; // Used for debugging the light source's depth buffer
 labhelper::Model* sphereModel = nullptr; // Used for debug rendering the light source
 
-float cameraSpeed = 10;
+float cameraSpeed = 5;
 
 // Texture parameters
 GLuint noiseTexture;
@@ -68,8 +68,8 @@ GLuint noiseTexture;
 ///////////////////////////////////////////////////////////////////////////////
 // Light source
 ///////////////////////////////////////////////////////////////////////////////
-vec3 lightPosition = vec3(20, 80, 0);
-bool animateLight = false;
+vec3 lightPosition = vec3(20, 40, 0);
+bool animateLight = true;
 vec3 pointLightColor = vec3(1.0f);
 float innerSpotlightAngle = 17.5f;
 float outerSpotlightAngle = 22.5f;
@@ -107,14 +107,14 @@ enum ClampMode
 };
 
 FboInfo shadowMapFB;
-int shadowMapResolution = 2048;
+int shadowMapResolution = 4128;
 int shadowMapClampMode = ClampMode::Border;
 bool shadowMapClampBorderShadowed = false;
 bool usePolygonOffset = true;
-bool useSoftFalloff = false;
-bool useHardwarePCF = false;
-float polygonOffset_factor = 1.0f;
-float polygonOffset_units = 5000.0f;
+bool useSoftFalloff = true;
+bool useHardwarePCF = true;
+float polygonOffset_factor = 2.0f;
+float polygonOffset_units = 30000.0f;
 
 // Render textures, these are rendered to in the rasterizer step, and the result is used in the ray marching shader
 FboInfo rasterizedFBO;
@@ -284,7 +284,7 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 
 	// Uncomment this to render the landing pad, used for debugging the light's depthBuffer
 	/*
-	mat4 modelMatrix(1.0f);
+	mat4 modelMatrix = translate(vec3(0, -30, 0)) * rotate(radians(-90.0f), worldUp);
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
 		projectionMatrix * viewMatrix * modelMatrix);
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * modelMatrix);
@@ -292,6 +292,7 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 		inverse(transpose(viewMatrix * modelMatrix)));
 	labhelper::render(landingpadModel);
 	*/
+	
 
 	// Planet
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
@@ -343,10 +344,10 @@ void display(void)
 
 	vec4 lightStartPosition = vec4(40.0f, 40.0f, 0.0f, 1.0f);
 	if(animateLight)
-		lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
+		lightPosition = vec3(rotate(currentTime * 0.5f, worldUp) * lightStartPosition);
 
 	mat4 lightViewMatrix = lookAt(lightPosition, vec3(0.0f), worldUp);
-	mat4 lightProjMatrix = perspective(radians(45.0f), 1.0f, 25.0f, 100.0f);
+	mat4 lightProjMatrix = perspective(radians(45.0f), 1.0f, 10.0f, 200.0f);
 
 	///////////////////////////////////////////////////////////////////////////
 	// Set Up Shadow Map
@@ -561,6 +562,20 @@ void gui()
 	ImGui::SliderFloat3("Sun Position", (float*)&lightPosition, -100, 100);
 	ImGui::Text("Controls");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
+	ImGui::Text("Shadow Map Settings");
+	ImGui::SliderInt("Shadow Map Resolution", &shadowMapResolution, 32, 2048);
+	ImGui::Text("Polygon Offset");
+	ImGui::Checkbox("Use polygon offset", &usePolygonOffset);
+	ImGui::SliderFloat("Factor", &polygonOffset_factor, 0.0f, 10.0f);
+	ImGui::SliderFloat("Units", &polygonOffset_units, 0.0f, 100000.0f);
+	ImGui::Text("Clamp Mode");
+	ImGui::RadioButton("Clamp to edge", &shadowMapClampMode, ClampMode::Edge);
+	ImGui::RadioButton("Clamp to border", &shadowMapClampMode, ClampMode::Border);
+	ImGui::Checkbox("Border as shadow", &shadowMapClampBorderShadowed);
+	ImGui::Checkbox("Use soft falloff", &useSoftFalloff);
+	ImGui::SliderFloat("Inner Deg.", &innerSpotlightAngle, 0.0f, 90.0f);
+	ImGui::SliderFloat("Outer Deg.", &outerSpotlightAngle, 0.0f, 90.0f);
+	ImGui::Checkbox("Use hardware PCF", &useHardwarePCF);
 	labhelper::perf::drawEventsWindow();
 }
 
