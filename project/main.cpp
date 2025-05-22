@@ -57,6 +57,8 @@ mat4 viewProjMatrix;
 // Model parameters
 labhelper::Model* planetModel = nullptr;
 mat4 planetModelMatrix;
+labhelper::Model* landingpadModel = nullptr; // Used for debugging the light source's depth buffer
+labhelper::Model* sphereModel = nullptr; // Used for debug rendering the light source
 
 float cameraSpeed = 10;
 
@@ -66,7 +68,7 @@ GLuint noiseTexture;
 ///////////////////////////////////////////////////////////////////////////////
 // Light source
 ///////////////////////////////////////////////////////////////////////////////
-vec3 lightPosition = vec3(0.0f, 100.0f, 0.0f);
+vec3 lightPosition = vec3(20, 80, 0);
 bool animateLight = false;
 vec3 pointLightColor = vec3(1.0f);
 float innerSpotlightAngle = 17.5f;
@@ -105,8 +107,8 @@ enum ClampMode
 };
 
 FboInfo shadowMapFB;
-int shadowMapResolution = 1024;
-int shadowMapClampMode = ClampMode::Edge;
+int shadowMapResolution = 2048;
+int shadowMapClampMode = ClampMode::Border;
 bool shadowMapClampBorderShadowed = false;
 bool usePolygonOffset = true;
 bool useSoftFalloff = false;
@@ -165,6 +167,8 @@ void loadNoiseTexture(const std::string& filepath)
 void initializePlanet() {
 	planetModel = labhelper::loadModelFromOBJ("../scenes/planet.obj");
 	planetModelMatrix = scale(vec3(9));
+	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
+	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
 }
 
 // This function is called once at the start of the program and never again
@@ -253,7 +257,12 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	const mat4& lightViewMatrix, 
 	const mat4& lightProjectionMatrix) {
 	glUseProgram(currentShaderProgram);
-	glFrontFace(GL_CW); // The models are rendered inside out so we flip what is considered to be the front face
+	if (currentShaderProgram == depthProgram) {
+		glFrontFace(GL_CCW); // depthProgram requires CCW vertex order for some reason
+	}
+	else {
+		glFrontFace(GL_CW); // The models are rendered inside out so we flip what is considered to be the front face
+	}
 
 	// Light source
 	vec4 viewSpaceLightPosition = viewMatrix * vec4(lightPosition, 1.0f);
@@ -265,12 +274,24 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 		normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
 	labhelper::setUniformSlow(currentShaderProgram, "spotOuterAngle", std::cos(radians(outerSpotlightAngle)));
 	labhelper::setUniformSlow(currentShaderProgram, "spotInnerAngle", std::cos(radians(innerSpotlightAngle)));
+	labhelper::setUniformSlow(currentShaderProgram, "useSpotLight", 1);
 	labhelper::setUniformSlow(currentShaderProgram, "useSoftFalloff", useSoftFalloff ? 1 : 0);
 
 	glActiveTexture(GL_TEXTURE10);
 	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
 	mat4 lightMatrix = translate(vec3(0.5f)) * scale(vec3(0.5f)) * lightProjectionMatrix * lightViewMatrix * inverse(viewMatrix);
 	labhelper::setUniformSlow(currentShaderProgram, "lightMatrix", lightMatrix);
+
+	// Uncomment this to render the landing pad, used for debugging the light's depthBuffer
+	/*
+	mat4 modelMatrix(1.0f);
+	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
+		projectionMatrix * viewMatrix * modelMatrix);
+	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * modelMatrix);
+	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
+		inverse(transpose(viewMatrix * modelMatrix)));
+	labhelper::render(landingpadModel);
+	*/
 
 	// Planet
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
@@ -286,11 +307,12 @@ void debugDrawLight(const glm::mat4& viewMatrix,
 	const glm::mat4& projectionMatrix,
 	const glm::vec3& worldSpaceLightPos)
 {
+	glFrontFace(GL_CW); // The models are rendered inside out so we flip what is considered to be the front face
 	mat4 modelMatrix = glm::translate(worldSpaceLightPos);
 	glUseProgram(shaderProgram);
 	labhelper::setUniformSlow(shaderProgram, "modelViewProjectionMatrix",
 		projectionMatrix * viewMatrix * modelMatrix);
-	labhelper::render(planetModel);
+	labhelper::render(sphereModel);
 }
 
 // This function will be called once per frame, so the code to set up
@@ -322,6 +344,7 @@ void display(void)
 	vec4 lightStartPosition = vec4(40.0f, 40.0f, 0.0f, 1.0f);
 	if(animateLight)
 		lightPosition = vec3(rotate(currentTime, worldUp) * lightStartPosition);
+
 	mat4 lightViewMatrix = lookAt(lightPosition, vec3(0.0f), worldUp);
 	mat4 lightProjMatrix = perspective(radians(45.0f), 1.0f, 25.0f, 100.0f);
 
@@ -374,10 +397,14 @@ void display(void)
 	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 	glClearDepth(1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	drawSolidGeometry(depthProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
+	drawSolidGeometry(depthProgram, lightViewMatrix, lightProjMatrix, lightViewMatrix, lightProjMatrix);
 	if (usePolygonOffset) {
 		glDisable(GL_POLYGON_OFFSET_FILL);
 	}
+
+	// These following two lines are used for debugging the ligth's depthBuffer
+	//labhelper::Material& screen = landingpadModel->m_materials[8];
+	//screen.m_emission_texture.gl_id = shadowMapFB.colorTextureTargets[0];
 
 	// Draw to fbo from camera
 	glBindFramebuffer(GL_FRAMEBUFFER, rasterizedFBO.framebufferId);
@@ -385,8 +412,6 @@ void display(void)
 	glClearColor(0, 0, 0, 0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
-	debugDrawLight(viewMatrix, projMatrix, vec3(lightPosition));
-
 	{
 		labhelper::perf::Scope s("Ray Marching");
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -405,6 +430,7 @@ void display(void)
 		drawScene(raymarchingProgram, viewMatrix, projMatrix);
 	}
 
+	debugDrawLight(viewMatrix, projMatrix, vec3(lightPosition));
 }
 
 // This function is used to update the scene according to user input
@@ -532,7 +558,7 @@ void gui()
 	ImGui::SliderFloat3("Scattering Wavelengths", (float*)&colorBandWavelengths, 0, 1000);
 	ImGui::SliderFloat("Scattering Strength", &atmosphereScatteringStrength, 0, 10);
 	ImGui::Checkbox("Animate light", &animateLight);
-	ImGui::SliderFloat3("Sun Position", (float*)&lightPosition, -200, 200);
+	ImGui::SliderFloat3("Sun Position", (float*)&lightPosition, -100, 100);
 	ImGui::Text("Controls");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
 	labhelper::perf::drawEventsWindow();
