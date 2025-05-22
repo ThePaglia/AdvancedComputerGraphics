@@ -73,16 +73,16 @@ vec3 calculateDirectIllumiunation(vec3 wo, vec3 n, vec3 base_color)
 
 vec3 calculateIndirectIllumination(vec3 wo, vec3 n, vec3 base_color)
 {
-	// The position of this fragment in world space
-	vec3 worldPoint = vec3(viewInverse * vec4(viewSpacePosition, 1));
-	// The direction from the planet's center towards this fragment in world space
-	vec3 planetNormal = normalize(worldPoint - planetOrigin);
-	// The direction of the sun in world space
-	vec3 worldSunDirection = normalize(vec3(viewInverse * vec4(viewSpaceLightDir, 0)));
+	// The idea here is to create a vector from the planet's origin towards the fragment and compare that vector to the sun direction
+	// This can be done in world space, but to save precious computation, we do it in view space instead (as we have those variables already)
+	// The planet's origin in view space. Since we get the other ones in view space, this is the only one we need to transform!
+	vec3 viewSpacePlanetOrigin = vec3(inverse(viewInverse) * vec4(planetOrigin, 1));
+	// The direction from the planet's center towards this fragment in view space
+	vec3 planetNormal = normalize(viewSpacePosition - viewSpacePlanetOrigin);
 
-	// The indirect illumination (i.e. shadow strength) is scaled by where the fragment is on the planet
-	// This acts similar to lighting a perfect sphere diffusely
-	float diffuse = max(dot(planetNormal, -worldSunDirection), 0);
+	// The indirect illumination (i.e. shadow strength) is scaled by where the fragment is on the planet (or actually where it would be on a perfect sphere)
+	// This acts similarly to lighting a perfect sphere diffusely. The negative sign is needed since we compare towards the sun
+	float diffuse = max(dot(planetNormal, -viewSpaceLightDir), 0);
 
 	return base_color * diffuse;
 }
