@@ -166,7 +166,7 @@ void loadNoiseTexture(const std::string& filepath)
 
 void initializePlanet() {
 	planetModel = labhelper::loadModelFromOBJ("../scenes/planet.obj");
-	planetModelMatrix = scale(vec3(9));
+	planetModelMatrix = scale(vec3(planetRadius - 1));
 	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
 	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
 }
@@ -347,7 +347,8 @@ void display(void)
 		lightPosition = vec3(rotate(currentTime * 0.5f, worldUp) * lightStartPosition);
 
 	mat4 lightViewMatrix = lookAt(lightPosition, vec3(0.0f), worldUp);
-	mat4 lightProjMatrix = perspective(radians(45.0f), 1.0f, 10.0f, 200.0f);
+	// We scale the orthographic "frustum" to the planet's radius so that we get the most out of the shadow map
+	mat4 lightProjMatrix = ortho(-planetRadius, planetRadius, -planetRadius, planetRadius, 10.0f, 200.0f);
 
 	///////////////////////////////////////////////////////////////////////////
 	// Set Up Shadow Map
@@ -412,6 +413,7 @@ void display(void)
 	glViewport(0, 0, rasterizedFBO.width, rasterizedFBO.height);
 	glClearColor(0, 0, 0, 0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	planetModelMatrix = scale(vec3(planetRadius - 1));
 	drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
 	{
 		labhelper::perf::Scope s("Ray Marching");
