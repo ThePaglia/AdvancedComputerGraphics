@@ -107,7 +107,7 @@ enum ClampMode
 };
 
 FboInfo shadowMapFB;
-int shadowMapResolution = 4128;
+int shadowMapResolution = 4096;
 int shadowMapClampMode = ClampMode::Border;
 bool shadowMapClampBorderShadowed = false;
 bool usePolygonOffset = true;
@@ -563,7 +563,7 @@ void gui()
 	ImGui::Text("Controls");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
 	ImGui::Text("Shadow Map Settings");
-	ImGui::SliderInt("Shadow Map Resolution", &shadowMapResolution, 32, 2048);
+	ImGui::SliderInt("Shadow Map Resolution", &shadowMapResolution, 32, 4096);
 	ImGui::Text("Polygon Offset");
 	ImGui::Checkbox("Use polygon offset", &usePolygonOffset);
 	ImGui::SliderFloat("Factor", &polygonOffset_factor, 0.0f, 10.0f);
