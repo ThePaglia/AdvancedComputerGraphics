@@ -350,7 +350,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
         // Set the start depth to a camera aligned plane. This gets rid of "hitbox" artifacts arising from hitting the cloud sphere at non-discretisized distances from the camera
         float camAlignedPlane = floor((startDepth * rayDotCam) / MARCH_SIZE) * MARCH_SIZE;
-        volumetricDepth = camAlignedPlane / rayDotCam;  // World-space depth, but camera-aligned
+        volumetricDepth = camAlignedPlane / rayDotCam + offset * 0.1f;  // World-space depth, but camera-aligned
         startDepth = volumetricDepth;
 
         // This is used to keep track of the distance traveled through the clouds
@@ -462,9 +462,9 @@ void main() {
 
     // 6. Raymarching
     vec3 color = vec3(0.0);
-    float blueNoise = texture2D(uBlueNoise, gl_FragCoord.xy / 100.0).r;
+    float blueNoise = texture2D(uNoiseTexture, gl_FragCoord.xy / 128.0).r;
     float offset = fract(blueNoise);
-    vec4 res = raymarch(rayOrigin, rayDirection, uCameraDir, offset * 0.1);
+    vec4 res = raymarch(rayOrigin, rayDirection, uCameraDir, offset);
     color = res.rgb;
 
     fragmentColor = vec4(color, 1.0);
