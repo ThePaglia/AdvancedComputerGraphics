@@ -69,7 +69,7 @@ GLuint noiseTexture;
 // Light source
 ///////////////////////////////////////////////////////////////////////////////
 vec3 lightPosition = vec3(20, 40, 0);
-bool animateLight = true;
+bool animateLight = false;
 vec3 directionalLightColor = vec3(1.0f);
 float directionalLightIntensityMultiplier = 2.0f;
 
@@ -79,7 +79,7 @@ float samplingIncreaseDepth = 5.0f;
 float samplingFalloffDistance = 10.0f;
 
 // Scene parameters
-float cloudMovementSpeed = 0.1f;
+float cloudMovementSpeed = 0.0f;
 float cloudTime = 0.0f;
 float planetRadius = 10.0f;
 float cloudlessDepth = 0.5f;
@@ -87,11 +87,13 @@ float cloudDepth = 1.0f;
 float cloudScale = 0.72f;
 float cloudStepMin = 0.01f;
 float cloudStepMax = 0.46f;
-float cloudShadowIntensity = 3.0f;
-float cloudShadowCutoff = 0.5f;
+float cloudShadowIntensity = 2.5f;
+float cloudShadowCutoff = 0.0f;
 float cloudLightingFalloff = 0.5f;
 float cloudNoiseUVScale = 128.0f;
 float cloudNoiseAmount = 0.1f;
+int cloudIterations = 6;
+int cloudShadowIterations = 4;
 float atmosphereDepth = 5.6f;
 float atmosphereDensityFalloff = 5.5f;
 vec3 colorBandWavelengths = vec3(700, 530, 440);
@@ -227,6 +229,8 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "cloudLightingFalloff", cloudLightingFalloff);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudNoiseUVScale", cloudNoiseUVScale);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudNoiseAmount", cloudNoiseAmount);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudShadowIterations", cloudShadowIterations);
+	labhelper::setUniformSlow(currentShaderProgram, "cloudIterations", cloudIterations);
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDepth", atmosphereDepth);
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDensityFalloff", atmosphereDensityFalloff);
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDensityAtSeaLevel", atmosphereDensityAtSeaLevel);
@@ -556,6 +560,8 @@ void gui()
 	ImGui::SliderFloat("Cloud Lighting Fraction", &cloudLightingFalloff, 0.001, 1);
 	ImGui::SliderFloat("Cloud Noise UV Scale", &cloudNoiseUVScale, 1, 2048);
 	ImGui::SliderFloat("Cloud Noise Amount", &cloudNoiseAmount, 0, 1);
+	ImGui::SliderInt("Cloud Iterations", &cloudIterations, 1, 10);
+	ImGui::SliderInt("Cloud Shadow Iterations", &cloudShadowIterations, 1, 6);
 	ImGui::Text("Atmosphere");
 	ImGui::SliderFloat("Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Density Falloff", &atmosphereDensityFalloff, 0, 10);

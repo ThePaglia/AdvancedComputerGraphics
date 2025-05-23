@@ -34,6 +34,8 @@ uniform float cloudShadowIntensity = 4f;
 uniform float cloudShadowCutoff = 0.5f;
 uniform float cloudNoiseUVScale = 128.0f;
 uniform float cloudNoiseAmount = 0.1f;
+uniform int cloudIterations = 6;
+uniform int cloudShadowIterations = 4;
 
 // Raymarching
 #define MAX_STEPS 500
@@ -86,7 +88,7 @@ float noise(vec3 x) {
 }
 
 // Fractal Brownian Motion
-float fbm(vec3 p) {
+float fbm(vec3 p, int numIterations) {
 	vec3 q = p + cloudTime * vec3(1.0, -0.2, -1.0);
 	float g = noise(q);
 
@@ -94,7 +96,7 @@ float fbm(vec3 p) {
 	float scale = 0.5;
 	float factor = 2.02;
 
-	for(int i = 0; i < 6; i++) {
+	for(int i = 0; i < numIterations; i++) {
 		f += scale * noise(q);
 		q *= factor;
 		factor += 0.21;
@@ -104,8 +106,8 @@ float fbm(vec3 p) {
 	return f;
 }
 
-float evaluateDensityAt(vec3 p) {
-    float f = fbm(p * 3);
+float evaluateDensityAt(vec3 p, int numIterations) {
+    float f = fbm(p * 3, numIterations);
 
     //float cloudBelt = min(-p.y - (-cloudHeight) + cloudDepth / 2, p.y + (-cloudHeight) + cloudDepth / 2) + f;
     
@@ -117,7 +119,7 @@ float evaluateDensityAt(vec3 p) {
 
     // Large-scale holes
     // NOTE! Something fishy happens when cloudScale goes beyond 1, you get these black clumps of darkness which I believe come from either how we scale the clouds, or how the smoothstep works
-    float largeHoleNoise = fbm(p * cloudScale); // lower frequency = larger features
+    float largeHoleNoise = fbm(p * cloudScale, numIterations); // lower frequency = larger features
     float holeMask = smoothstep(cloudStepMin, cloudStepMax, largeHoleNoise); // controls size/sharpness of holes
 
     return holeMask * shellDensity;
@@ -305,7 +307,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                     // You could add the offset here to make shadow artifacting somewhat less noticeable
                     vec3 p = opaquePoint + sunDirection * (tExitInner + i * stepSize);
 
-                    float density = evaluateDensityAt(p);
+                    float density = evaluateDensityAt(p, cloudShadowIterations);
                     cloudDensityAbove += max(density, 0) * stepSize;
                 }
             }
@@ -364,7 +366,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             vec3 p = rayOrigin + rayDirection * volumetricDepth;
 
             // Get the density at the current point
-            float density = evaluateDensityAt(p);
+            float density = evaluateDensityAt(p, cloudIterations);
 
             // Accumulate the result if the density is above 0.0
             if (density > 0.0) {
@@ -389,7 +391,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 // TODO: perhaps it is possible to increment the opticalDepth using atmosphereDensityAtPoint as we step through the atmosphere? Instead of recalculating it every frame (which the following line does)
                 float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, volumetricDepth - max(tEnterAtmosphere, 0));
 
-                float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection)) / 0.3, 0.0, 1.0);
+                float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection, cloudIterations)) / 0.3, 0.0, 1.0);
                 // TODO: Make cloud color reflect the incoming sunlight's color, i.e. a nice orange/red at glancing angles
                 vec3 lin = ambientColor * ambientIntensity + directionalLightIntensityMultiplier * directionalLightColor * diffuse;
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
