@@ -72,43 +72,43 @@ const float atmosphereRadius = planetRadius + atmosphereDepth;
 vec3 sunDirection = normalize(lightPosition);
 
 float sdSphere(vec3 p, float radius) {
-	return length(p) - radius;
+    return length(p) - radius;
 }
 
 float noise(vec3 x) {
-	vec3 p = floor(x);
-	vec3 f = fract(x);
-	f = f * f * (3.0 - 2.0 * f);
+    vec3 p = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
 
-	vec2 uv = (p.xy + vec2(37.0, 239.0) * p.z) + f.xy;
-	vec2 tex = textureLod(uNoiseTexture, (uv + 0.5) / textureSize(uNoiseTexture, 0), 0.0).yx;
-	return mix(tex.x, tex.y, f.z) * 2.0 - 1.0;
+    vec2 uv = (p.xy + vec2(37.0, 239.0) * p.z) + f.xy;
+    vec2 tex = textureLod(uNoiseTexture, (uv + 0.5) / textureSize(uNoiseTexture, 0), 0.0).yx;
+    return mix(tex.x, tex.y, f.z) * 2.0 - 1.0;
 }
 
 // Fractal Brownian Motion
 float fbm(vec3 p, int numIterations) {
-	vec3 q = p + cloudTime * vec3(1.0, -0.2, -1.0);
-	float g = noise(q);
+    vec3 q = p + cloudTime * vec3(1.0, -0.2, -1.0);
+    float g = noise(q);
 
-	float f = 0.0;
-	float scale = 0.5;
-	float factor = 2.02;
+    float f = 0.0;
+    float scale = 0.5;
+    float factor = 2.02;
 
-	for(int i = 0; i < numIterations; i++) {
-		f += scale * noise(q);
-		q *= factor;
-		factor += 0.21;
-		scale *= 0.5;
-	}
+    for(int i = 0; i < numIterations; i++) {
+        f += scale * noise(q);
+        q *= factor;
+        factor += 0.21;
+        scale *= 0.5;
+    }
 
-	return f;
+    return f;
 }
 
 float evaluateDensityAt(vec3 p, int numIterations) {
     float f = fbm(p * 3, numIterations);
 
     //float cloudBelt = min(-p.y - (-cloudHeight) + cloudDepth / 2, p.y + (-cloudHeight) + cloudDepth / 2) + f;
-    
+
     float outerCloudShell = sdSphere(p - planetOrigin, planetRadius + cloudlessDepth + cloudDepth);
     float innerCloudShell = -sdSphere(p - planetOrigin, planetRadius + cloudlessDepth); // cloudDepth = shell thickness
 
@@ -128,8 +128,7 @@ float sdf(vec3 p) {
     return sphere;
 }
 
-vec3 calculateNormal(in vec3 p)
-{
+vec3 calculateNormal(in vec3 p) {
     const vec3 small_step = vec3(0.001, 0.0, 0.0);
 
     float gradient_x = sdf(p + small_step.xyy) - sdf(p - small_step.xyy);
@@ -141,25 +140,24 @@ vec3 calculateNormal(in vec3 p)
     return normalize(normal);
 }
 
-
 // Stolen from https://www.shadertoy.com/view/Ml3Gz8
 float smoothmin(float a, float b, float k) {
-    
+
     // Compute the difference between the two values.
     // This is used to interpolate both values inside the range (-k, k).
     // Smaller ranges give a better approximation of the min function.
     float h = a - b;
-    
+
     // The interval [-k, k] is mapped to [0, 1],
     // and clamping takes place only after this transformation.
-    
+
     // Map [-k, k] to [0, 1] and clamp if outside the latter.
-    h = clamp(0.5 + 0.5*h/k, 0.0, 1.0);    
-    
+    h = clamp(0.5 + 0.5 * h / k, 0.0, 1.0);    
+
     // Linearly interpolate the input values using h inside (0, 1).
     // The second term ensures continuous derivatives at the boundaries of [0,1],
     // but this is not completely obvious! See my blog post for details.
-    return mix(a, b, h) - k*h*(1.0-h);    
+    return mix(a, b, h) - k * h * (1.0 - h);
 }
 
 bool intersectBox(vec3 ro, vec3 rd, vec3 boxMin, vec3 boxMax, out float tEnter, out float tExit) {
@@ -171,7 +169,7 @@ bool intersectBox(vec3 ro, vec3 rd, vec3 boxMin, vec3 boxMax, out float tEnter, 
     vec3 tMax = max(t0, t1);
 
     tEnter = max(max(tMin.x, tMin.y), tMin.z);
-    tExit  = min(min(tMax.x, tMax.y), tMax.z);
+    tExit = min(min(tMax.x, tMax.y), tMax.z);
 
     return tEnter <= tExit;
 }
@@ -182,11 +180,12 @@ bool intersectSphere(vec3 ro, vec3 rd, vec3 sc, float sr, out float tEnter, out 
     float c = dot(oc, oc) - sr * sr;
     float h = b * b - c;
 
-    if (h < 0.0) return false;  // No intersection
+    if(h < 0.0)
+        return false;  // No intersection
 
     h = sqrt(h);
     tEnter = -b - h;
-    tExit  = -b + h;
+    tExit = -b + h;
     return true;
 }
 
@@ -195,8 +194,8 @@ bool raymarchSDF(vec3 rayOrigin, vec3 rayDirection, int maxSteps, float maxDepth
         point = rayOrigin + rayDirection * depth;
         float distanceToWorld = sdf(point);
 
-        if(distanceToWorld <= 0.01f) {
-            return true;    
+        if(distanceToWorld <= 0.01) {
+            return true;
         }
 
         depth += distanceToWorld;
@@ -222,8 +221,8 @@ float atmosphereDensityAtPoint(vec3 p) {
 float numOpticalDepthPoints = 8;
 float atmosphereOpticalDepth(vec3 rayOrigin, vec3 rayDirection, float rayLength) {
     float stepSize = rayLength / (numOpticalDepthPoints - 1);
-    float opticalDepth = 0.0f;
-    
+    float opticalDepth = 0.0;
+
     float marchDepth = 0.0;
 
     // March through the atmosphere along the ray length and accumulate density
@@ -252,10 +251,10 @@ vec4 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
         float tEnter, sunRayLength;
         // We are guaranteed to intersect the atmosphere sphere as we start the ray inside of it, we can therefore use this function to get sunRayLength
         intersectSphere(p, sunDirection, planetOrigin, atmosphereRadius, tEnter, sunRayLength);
-        
+
         // The accumulated amount of light (density) from the point towards the sun
         float sunRayOpticalDepth = atmosphereOpticalDepth(p, sunDirection, sunRayLength);
-        
+
         // The accumulated amount of light (density) from the point back towards the camera
         // NOTE: this variable creates a somewhat noticeable ring of darkness right around the planet as this is where a ray travels the furthest through the atmosphere, 
         // this behaviour seems to me to be physically correct but the result is somewhat strange
@@ -264,7 +263,7 @@ vec4 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
 
         // The light that reaches the camera has an exponential falloff
         vec3 transmittance = exp(-(sunRayOpticalDepth + viewRayOpticalDepth) * atmosphereScatteringCoefficients);
-        
+
         // Sample the density at this inscatter point
         float density = atmosphereDensityAtPoint(p);
 
@@ -317,7 +316,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     }
 
     // Calculate the atmosphere lighting contribution
-    vec4 atmosphereLight = vec4(0.0f);
+    vec4 atmosphereLight = vec4(0.0);
     float atmosphereRadius = planetRadius + atmosphereDepth;
     float tEnterAtmosphere, tExitAtmosphere;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnterAtmosphere, tExitAtmosphere) && tExitAtmosphere > 0) {
@@ -325,7 +324,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         float distanceThroughAtmosphere = min(tExitAtmosphere, opaqueDepth) - max(tEnterAtmosphere, 0);
         atmosphereLight = calculateAtmosphereLight(p, rayDirection, distanceThroughAtmosphere, opaqueRes);
     }
-    
+
     // The depth of the current ray marched step through the clouds
     float volumetricDepth = 0;
     vec4 volumetricRes = vec4(0.0);
@@ -334,7 +333,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     float tEnterClouds, tExitClouds;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
         float startDepth = max(tEnterClouds, 0.0);
-        
+
         // We need to keep track of whether or not we have skipped the inner cloud shell, i.e. entered a cloud region and then exited it and jumped forward to the next cloud region on the other side of the cloud shell
         bool hasSkippedInnerCloudShell = false;
 
@@ -367,7 +366,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             float density = evaluateDensityAt(p, cloudIterations);
 
             // Accumulate the result if the density is above 0.0
-            if (density > 0.0) {
+            if(density > 0.0) {
                 float shadowMultiplier = 1;
                 float ent, ext;
 
@@ -389,8 +388,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 // TODO: perhaps it is possible to increment the opticalDepth using atmosphereDensityAtPoint as we step through the atmosphere? Instead of recalculating it every frame (which the following line does)
                 float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, volumetricDepth - max(tEnterAtmosphere, 0));
 
-<<<<<<< HEAD
-                float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection)) / 0.3, 0.0, 1.0);
+                float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection, cloudIterations)) / 0.3, 0.0, 1.0);
                 // Make cloud color reflect the incoming sunlight's color, i.e. a nice orange/red at glancing angles
                 // Compute the angle between sun direction and view direction
                 float sunViewDot = dot(sunDirection, -rayDirection);
@@ -405,11 +403,6 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
                 // Use sunColor in the cloud lighting calculation
                 vec3 lin = ambientColor * ambientIntensity + directionalLightIntensityMultiplier * directionalLightColor * sunColor * diffuse;
-=======
-                float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection, cloudIterations)) / 0.3, 0.0, 1.0);
-                // TODO: Make cloud color reflect the incoming sunlight's color, i.e. a nice orange/red at glancing angles
-                vec3 lin = ambientColor * ambientIntensity + directionalLightIntensityMultiplier * directionalLightColor * diffuse;
->>>>>>> d3b673a8e434f7314c6f58cf2f5e2b9a99fabedd
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
                 color.rgb *= lin;
                 color.rgb *= color.a;
@@ -418,7 +411,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 volumetricRes += color * (1.0 - volumetricRes.a);
 
                 // We can immediately break out of the loop if the transparency is greater than this treshold, the reasoning is that any further steps would contribute an insignificant amount to the pixel color
-                if (volumetricRes.a >= 0.999) {
+                if(volumetricRes.a >= 0.999) {
                     break;
                 }
             }

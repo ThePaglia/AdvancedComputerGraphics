@@ -43,8 +43,8 @@ GLuint raymarchingProgram;
 ///////////////////////////////////////////////////////////////////////////////
 // Shader programs
 ///////////////////////////////////////////////////////////////////////////////
-GLuint shaderProgram;       // Shader for rendering the final image
-GLuint depthProgram; // Shader used to draw the shadow map
+GLuint shaderProgram; // Shader for rendering the final image
+GLuint depthProgram;  // Shader used to draw the shadow map
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
@@ -58,7 +58,7 @@ mat4 viewProjMatrix;
 labhelper::Model* planetModel = nullptr;
 mat4 planetModelMatrix;
 labhelper::Model* landingpadModel = nullptr; // Used for debugging the light source's depth buffer
-labhelper::Model* sphereModel = nullptr; // Used for debug rendering the light source
+labhelper::Model* sphereModel = nullptr;	 // Used for debug rendering the light source
 
 float cameraSpeed = 5;
 
@@ -165,7 +165,8 @@ void loadNoiseTexture(const std::string& filepath)
 	stbi_image_free(data);
 }
 
-void initializePlanet() {
+void initializePlanet()
+{
 	planetModel = labhelper::loadModelFromOBJ("../scenes/planet.obj");
 	planetModelMatrix = scale(vec3(planetRadius - 1));
 	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
@@ -192,7 +193,7 @@ void initialize()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
 
 	glEnable(GL_DEPTH_TEST); // enable Z-buffering
-	glEnable(GL_CULL_FACE);  // enables backface culling
+	glEnable(GL_CULL_FACE);	 // enables backface culling
 }
 
 // This function is used to draw the main objects on the scene
@@ -259,12 +260,15 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	const mat4& viewMatrix,
 	const mat4& projectionMatrix,
 	const mat4& lightViewMatrix,
-	const mat4& lightProjectionMatrix) {
+	const mat4& lightProjectionMatrix)
+{
 	glUseProgram(currentShaderProgram);
-	if (currentShaderProgram == depthProgram) {
+	if (currentShaderProgram == depthProgram)
+	{
 		glFrontFace(GL_CCW); // depthProgram requires CCW vertex order for some reason, this way it properly renders the forward facing faces
 	}
-	else {
+	else
+	{
 		glFrontFace(GL_CW); // The models are rendered inside out so we flip what is considered to be the front face
 	}
 
@@ -342,7 +346,7 @@ void display(void)
 	mat4 cameraRotation = mat4(transpose(cameraBaseVectorsWorldSpace)); // NOTE: this is also calculated in the raymarching shader, perhaps we can just send the result there?
 	mat4 viewMatrix = cameraRotation * translate(-cameraPosition);
 	viewProjMatrix = projMatrix * viewMatrix;
-	//viewMatrix = lookAt(cameraPosition, cameraPosition - cameraDirection, worldUp);
+	// viewMatrix = lookAt(cameraPosition, cameraPosition - cameraDirection, worldUp);
 
 	vec4 lightStartPosition = vec4(40.0f, 40.0f, 0.0f, 1.0f);
 	if (animateLight)
@@ -355,17 +359,20 @@ void display(void)
 	///////////////////////////////////////////////////////////////////////////
 	// Set Up Shadow Map
 	///////////////////////////////////////////////////////////////////////////
-	if (shadowMapFB.width != shadowMapResolution || shadowMapFB.height != shadowMapResolution) {
+	if (shadowMapFB.width != shadowMapResolution || shadowMapFB.height != shadowMapResolution)
+	{
 		shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
 	}
 
-	if (shadowMapClampMode == ClampMode::Edge) {
+	if (shadowMapClampMode == ClampMode::Edge)
+	{
 		glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	}
 
-	if (shadowMapClampMode == ClampMode::Border) {
+	if (shadowMapClampMode == ClampMode::Border)
+	{
 		glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
@@ -373,11 +380,13 @@ void display(void)
 		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &border.x);
 	}
 
-	if (useHardwarePCF) {
+	if (useHardwarePCF)
+	{
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	}
-	else {
+	else
+	{
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	}
@@ -390,7 +399,8 @@ void display(void)
 	///////////////////////////////////////////////////////////////////////////
 	// Draw Shadow Map
 	///////////////////////////////////////////////////////////////////////////
-	if (usePolygonOffset) {
+	if (usePolygonOffset)
+	{
 		glEnable(GL_POLYGON_OFFSET_FILL);
 		glPolygonOffset(polygonOffset_factor, polygonOffset_units);
 	}
@@ -402,13 +412,14 @@ void display(void)
 	glClearDepth(1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	drawSolidGeometry(depthProgram, lightViewMatrix, lightProjMatrix, lightViewMatrix, lightProjMatrix);
-	if (usePolygonOffset) {
+	if (usePolygonOffset)
+	{
 		glDisable(GL_POLYGON_OFFSET_FILL);
 	}
 
 	// These following two lines are used for debugging the ligth's depthBuffer
-	//labhelper::Material& screen = landingpadModel->m_materials[8];
-	//screen.m_emission_texture.gl_id = shadowMapFB.colorTextureTargets[0];
+	// labhelper::Material& screen = landingpadModel->m_materials[8];
+	// screen.m_emission_texture.gl_id = shadowMapFB.colorTextureTargets[0];
 
 	// Draw to fbo from camera
 	glBindFramebuffer(GL_FRAMEBUFFER, rasterizedFBO.framebufferId);
@@ -469,7 +480,8 @@ bool handleEvents(void)
 			int y;
 			SDL_GetMouseState(&x, &y);
 		}
-		if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT && (!labhelper::isGUIvisible() || !ImGui::GetIO().WantCaptureMouse)) {
+		if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT && (!labhelper::isGUIvisible() || !ImGui::GetIO().WantCaptureMouse))
+		{
 			g_doMouseLookaround = !g_doMouseLookaround;
 			SDL_SetRelativeMouseMode(g_doMouseLookaround ? SDL_TRUE : SDL_FALSE);
 		}
