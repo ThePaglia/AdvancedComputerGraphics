@@ -28,12 +28,12 @@ uniform float directionalLightIntensityMultiplier;
 
 // Cloud
 const vec3 ambientColor = vec3(0.60, 0.60, 0.75);
-const float ambientIntensity = 0.9f;
-uniform float cloudTime = 1.0f;
-uniform float cloudShadowIntensity = 4f;
-uniform float cloudShadowCutoff = 0.5f;
-uniform float cloudNoiseUVScale = 128.0f;
-uniform float cloudNoiseAmount = 0.1f;
+const float ambientIntensity = 0.9;
+uniform float cloudTime = 1.0;
+uniform float cloudShadowIntensity = 4;
+uniform float cloudShadowCutoff = 0.5;
+uniform float cloudNoiseUVScale = 128.0;
+uniform float cloudNoiseAmount = 0.1;
 uniform int cloudIterations = 6;
 uniform int cloudShadowIterations = 4;
 
@@ -41,8 +41,7 @@ uniform int cloudShadowIterations = 4;
 #define MAX_STEPS 500
 #define MAX_MARCH_DISTANCE 1000
 const float MARCH_SIZE = 0.08;
-const float ATMOSPHERE_MARCH_SIZE = 100;
-uniform sampler2D uBlueNoise;
+const float ATMOSPHERE_MARCH_SIZE = 100.0;
 
 // Sampling
 uniform float samplingIncreaseFactor;
@@ -50,23 +49,23 @@ uniform float samplingIncreaseDepth;
 uniform float samplingFalloffDistance;
 
 // Scene parameters
-const float cloudHeight = 10f;
-const float cloudBoxWidth = 200;
-const float atmosphereFalloffDepth = 100;
+const float cloudHeight = 10.0;
+const float cloudBoxWidth = 200.0;
+const float atmosphereFalloffDepth = 100.0;
 
 // Planet parameters
-uniform vec3 planetOrigin = vec3(0, 0, 0);
-uniform float planetRadius = 10f;
-uniform float cloudlessDepth = 0.5f;
-uniform float cloudDepth = 1f;
-uniform float cloudScale = 1.0f;
-uniform float atmosphereDepth = 3f;
-uniform float cloudStepMin = 0.1f;
-uniform float cloudStepMax = 0.8f;
-uniform float cloudLightingFalloff = 0.5f;
-uniform float atmosphereDensityFalloff = 2f;
-uniform vec3 atmosphereScatteringCoefficients = vec3(0, 0, 0);
-uniform float atmosphereDensityAtSeaLevel = 0.5f;
+uniform vec3 planetOrigin = vec3(0.0, 0.0, 0.0);
+uniform float planetRadius = 10.0;
+uniform float cloudlessDepth = 0.5;
+uniform float cloudDepth = 1.0;
+uniform float cloudScale = 1.0;
+uniform float atmosphereDepth = 3.0;
+uniform float cloudStepMin = 0.1;
+uniform float cloudStepMax = 0.8;
+uniform float cloudLightingFalloff = 0.5;
+uniform float atmosphereDensityFalloff = 2.0;
+uniform vec3 atmosphereScatteringCoefficients = vec3(0.0, 0.0, 0.0);
+uniform float atmosphereDensityAtSeaLevel = 0.5;
 
 // Precalculated constants
 const float atmosphereRadius = planetRadius + atmosphereDepth;
@@ -82,8 +81,7 @@ float noise(vec3 x) {
 	f = f * f * (3.0 - 2.0 * f);
 
 	vec2 uv = (p.xy + vec2(37.0, 239.0) * p.z) + f.xy;
-	vec2 tex = textureLod(uNoiseTexture, (uv + 0.5) / 256.0, 0.0).yx;
-
+	vec2 tex = textureLod(uNoiseTexture, (uv + 0.5) / textureSize(uNoiseTexture, 0), 0.0).yx;
 	return mix(tex.x, tex.y, f.z) * 2.0 - 1.0;
 }
 
