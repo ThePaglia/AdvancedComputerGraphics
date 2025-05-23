@@ -388,8 +388,20 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, volumetricDepth - max(tEnterAtmosphere, 0));
 
                 float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection)) / 0.3, 0.0, 1.0);
-                // TODO: Make cloud color reflect the incoming sunlight's color, i.e. a nice orange/red at glancing angles
-                vec3 lin = ambientColor * ambientIntensity + directionalLightIntensityMultiplier * directionalLightColor * diffuse;
+                // Make cloud color reflect the incoming sunlight's color, i.e. a nice orange/red at glancing angles
+                // Compute the angle between sun direction and view direction
+                float sunViewDot = dot(sunDirection, -rayDirection);
+                // Remap to [0,1] (0 = perpendicular, 1 = same direction)
+                float sunViewFactor = clamp(sunViewDot, 0.0, 1.0);
+
+                // Define the "sunset" color (orange/red) and white for overhead sun
+                vec3 sunsetColor = vec3(1.0, 0.5, 0.2); // Orange
+
+                // Interpolate between sunset and overhead color based on angle
+                vec3 sunColor = mix(sunsetColor, directionalLightColor, pow(sunViewFactor, 2.0));
+
+                // Use sunColor in the cloud lighting calculation
+                vec3 lin = ambientColor * ambientIntensity + directionalLightIntensityMultiplier * directionalLightColor * sunColor * diffuse;
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
                 color.rgb *= lin;
                 color.rgb *= color.a;
