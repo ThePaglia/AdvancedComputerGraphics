@@ -135,7 +135,7 @@ void loadShaders(bool is_reload)
 	}
 
 	shader = labhelper::loadShaderProgram("../project/raymarching.vert", "../project/raymarching.frag", is_reload);
-	if (shader != 0) 
+	if (shader != 0)
 	{
 		raymarchingProgram = shader;
 	}
@@ -174,7 +174,7 @@ void initializePlanet() {
 void initialize()
 {
 	ENSURE_INITIALIZE_ONLY_ONCE();
-	
+
 	// Load Shaders
 	loadShaders(false);
 
@@ -232,7 +232,6 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDensityAtSeaLevel", atmosphereDensityAtSeaLevel);
 	vec3 scatteringCoefficients = vec3(pow(300 / colorBandWavelengths.x, 4), pow(300 / colorBandWavelengths.y, 4), pow(300 / colorBandWavelengths.z, 4)) * atmosphereScatteringStrength;
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereScatteringCoefficients", scatteringCoefficients);
-	
 
 	// Sampling
 	labhelper::setUniformSlow(currentShaderProgram, "samplingIncreaseFactor", samplingIncreaseFactor);
@@ -252,10 +251,10 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::drawFullScreenQuad();
 }
 
-void drawSolidGeometry(GLuint currentShaderProgram, 
+void drawSolidGeometry(GLuint currentShaderProgram,
 	const mat4& viewMatrix,
 	const mat4& projectionMatrix,
-	const mat4& lightViewMatrix, 
+	const mat4& lightViewMatrix,
 	const mat4& lightProjectionMatrix) {
 	glUseProgram(currentShaderProgram);
 	if (currentShaderProgram == depthProgram) {
@@ -292,7 +291,6 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 		inverse(transpose(viewMatrix * modelMatrix)));
 	labhelper::render(landingpadModel);
 	*/
-	
 
 	// Planet
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
@@ -343,7 +341,7 @@ void display(void)
 	//viewMatrix = lookAt(cameraPosition, cameraPosition - cameraDirection, worldUp);
 
 	vec4 lightStartPosition = vec4(40.0f, 40.0f, 0.0f, 1.0f);
-	if(animateLight)
+	if (animateLight)
 		lightPosition = vec3(rotate(currentTime * 0.5f, worldUp) * lightStartPosition);
 
 	mat4 lightViewMatrix = lookAt(lightPosition, vec3(0.0f), worldUp);
@@ -606,7 +604,7 @@ int main(int argc, char* argv[])
 
 		// render to window
 		display();
-		
+
 		// Render overlay GUI.
 		gui();
 
