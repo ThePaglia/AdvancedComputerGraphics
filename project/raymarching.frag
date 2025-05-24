@@ -63,6 +63,7 @@ uniform float atmosphereDepth = 3.0;
 uniform float cloudStepMin = 0.1;
 uniform float cloudStepMax = 0.8;
 uniform float cloudLightingFalloff = 0.5;
+uniform float sunsetCloudWidth = 0.2f;
 uniform float atmosphereDensityFalloff = 2.0;
 uniform vec3 atmosphereScatteringCoefficients = vec3(0.0, 0.0, 0.0);
 uniform float atmosphereDensityAtSeaLevel = 0.5;
@@ -370,6 +371,9 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 float shadowMultiplier = 1;
                 float ent, ext;
 
+                vec3 planetNormal = normalize(p - planetOrigin);
+                float dotSunPlanet = dot(sunDirection, planetNormal);
+
                 // Hacky way of determining if a cloud is in shadow, should be updated to be physically correct in the future
                 // Uses a similar technique to lambertian diffuse lighting, but after the top half of the planet (top half is fully lit)
                 // The bottom half has a gradient from 1 at the middle to 0 at the bottom, but the gradient can be adjusted:
@@ -379,7 +383,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 // 0.1 -> gradient extends one 10th of the bottom half
                 float lightingFalloff = cloudLightingFalloff;
                 // TODO: calculate lightingFalloff from the difference of the cloudRadius and the atmosphereRadius
-                float diffuseIntensity = clamp(dot(sunDirection, normalize(p - planetOrigin)) * (1 / lightingFalloff) + 1, 0, 1);
+                float diffuseIntensity = clamp(dotSunPlanet * (1 / lightingFalloff) + 1, 0, 1);
 
                 // Scale cloud lighting by how far away it is from the closest point on the atmosphere shell, 
                 // hacky and not (even close to) a physically correct way of achieving darker clouds at the far end of the planet
@@ -389,17 +393,12 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, volumetricDepth - max(tEnterAtmosphere, 0));
 
                 float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection, cloudIterations)) / 0.3, 0.0, 1.0);
-                // Make cloud color reflect the incoming sunlight's color, i.e. a nice orange/red at glancing angles
-                // Compute the angle between sun direction and view direction
-                float sunViewDot = dot(sunDirection, -rayDirection);
-                // Remap to [0,1] (0 = perpendicular, 1 = same direction)
-                float sunViewFactor = clamp(sunViewDot, 0.0, 1.0);
 
+                float sunViewFactor = clamp((dotSunPlanet - sunsetCloudWidth) * (1 / sunsetCloudWidth), 0, 1);
                 // Define the "sunset" color (orange/red) and white for overhead sun
-                vec3 sunsetColor = vec3(1.0, 0.5, 0.2); // Orange
-
+                vec3 sunsetColor = vec3(1.0, 0.5, 0.2) * 1.5f;
                 // Interpolate between sunset and overhead color based on angle
-                vec3 sunColor = mix(sunsetColor, directionalLightColor, pow(sunViewFactor, 2.0));
+                vec3 sunColor = mix(sunsetColor, directionalLightColor, sunViewFactor);
 
                 // Use sunColor in the cloud lighting calculation
                 vec3 lin = ambientColor * ambientIntensity + directionalLightIntensityMultiplier * directionalLightColor * sunColor * diffuse;

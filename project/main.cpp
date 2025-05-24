@@ -89,9 +89,10 @@ float cloudStepMin = 0.01f;
 float cloudStepMax = 0.46f;
 float cloudShadowIntensity = 2.5f;
 float cloudShadowCutoff = 0.0f;
-float cloudLightingFalloff = 0.5f;
+float cloudLightingFalloff = 0.4f;
 float cloudNoiseUVScale = 128.0f;
 float cloudNoiseAmount = 0.1f;
+float sunsetCloudWidth = 0.1f;
 int cloudIterations = 6;
 int cloudShadowIterations = 4;
 float atmosphereDepth = 5.6f;
@@ -231,6 +232,7 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "cloudNoiseUVScale", cloudNoiseUVScale);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudNoiseAmount", cloudNoiseAmount);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudShadowIterations", cloudShadowIterations);
+	labhelper::setUniformSlow(currentShaderProgram, "sunsetCloudWidth", sunsetCloudWidth);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudIterations", cloudIterations);
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDepth", atmosphereDepth);
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDensityFalloff", atmosphereDensityFalloff);
@@ -572,6 +574,7 @@ void gui()
 	ImGui::SliderFloat("Cloud Noise Amount", &cloudNoiseAmount, 0, 1);
 	ImGui::SliderInt("Cloud Iterations", &cloudIterations, 1, 10);
 	ImGui::SliderInt("Cloud Shadow Iterations", &cloudShadowIterations, 1, 6);
+	ImGui::SliderFloat("Sunset Cloud Width", &sunsetCloudWidth, 0.001, 1);
 	ImGui::Text("Atmosphere");
 	ImGui::SliderFloat("Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Density Falloff", &atmosphereDensityFalloff, 0, 10);
