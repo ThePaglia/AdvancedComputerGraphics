@@ -59,6 +59,7 @@ labhelper::Model* planetModel = nullptr;
 mat4 planetModelMatrix;
 labhelper::Model* landingpadModel = nullptr; // Used for debugging the light source's depth buffer
 labhelper::Model* sphereModel = nullptr;	 // Used for debug rendering the light source
+labhelper::Model* shipModel = nullptr;
 
 float cameraSpeed = 10;
 
@@ -157,6 +158,7 @@ void initializePlanet()
 	planetModelMatrix = scale(vec3(planetRadius));
 	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
 	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
+	shipModel = labhelper::loadModelFromOBJ("../scenes/NewShip.obj");
 }
 
 // This function is called once at the start of the program and never again
@@ -289,6 +291,17 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 		inverse(transpose(viewMatrix * planetModelMatrix)));
 
 	labhelper::render(planetModel);
+
+	// Planet
+	float d = 16 + sin(cloudTime * 2) * 0.25f;
+	mat4 shipMatrix = rotate(radians(25.0f), vec3(0, 0, 1)) * translate(vec3(0, d, 0)) * scale(vec3(0.05f));
+	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
+		projectionMatrix * viewMatrix * shipMatrix);
+	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * shipMatrix);
+	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
+		inverse(transpose(viewMatrix * shipMatrix)));
+
+	labhelper::render(shipModel);
 }
 
 void debugDrawLight(const glm::mat4& viewMatrix,
@@ -335,7 +348,7 @@ void display(void)
 
 	mat4 lightViewMatrix = lookAt(lightPosition, vec3(0.0f), worldUp);
 	// We scale the orthographic "frustum" to the planet's radius so that we get the most out of the shadow map
-	mat4 lightProjMatrix = ortho(-planetRadius, planetRadius, -planetRadius, planetRadius, 10.0f, 200.0f);
+	mat4 lightProjMatrix = ortho(-planetRadius, planetRadius, -planetRadius, planetRadius, 10.0f, 100.0f);
 
 	///////////////////////////////////////////////////////////////////////////
 	// Set Up Shadow Map
