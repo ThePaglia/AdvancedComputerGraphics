@@ -96,6 +96,16 @@ float atmosphereDensityFalloff = 3.0f;
 vec3 colorBandWavelengths = vec3(700, 530, 440);
 float atmosphereScatteringStrength = 3.0f;
 float atmosphereDensityAtSeaLevel = 0.17f;
+float pointLightIntensityMultiplier = 0.8f;
+float mieIntensity = 0.2;
+float mieG = 0.76;
+
+// Shadow map
+enum ClampMode
+{
+	Edge = 1,
+	Border = 2
+};
 
 FboInfo shadowMapFB;
 int shadowMapResolution = 4096;
@@ -225,6 +235,8 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDensityAtSeaLevel", atmosphereDensityAtSeaLevel);
 	vec3 scatteringCoefficients = vec3(pow(300 / colorBandWavelengths.x, 4), pow(300 / colorBandWavelengths.y, 4), pow(300 / colorBandWavelengths.z, 4)) * atmosphereScatteringStrength;
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereScatteringCoefficients", scatteringCoefficients);
+	labhelper::setUniformSlow(currentShaderProgram, "mieIntensity", mieIntensity);
+	labhelper::setUniformSlow(currentShaderProgram, "mieG", mieG);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
@@ -563,7 +575,8 @@ void gui()
 	ImGui::SliderFloat("Cloud Noise UV Scale", &cloudNoiseUVScale, 1, 2048);
 	ImGui::SliderFloat("Cloud Noise Amount", &cloudNoiseAmount, 0, 1);
 	ImGui::SliderFloat("Sunset Cloud Width", &sunsetCloudWidth, 0.001, 1);
-
+	ImGui::SliderFloat("Mie Scattering Intensity", &mieIntensity, 0.0, 1.0);
+	ImGui::SliderFloat("Mie Scattering G", &mieG, 0.0, 0.999);
 	ImGui::Text("Atmosphere");
 	ImGui::SliderFloat("Atmosphere Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Density Falloff", &atmosphereDensityFalloff, 0, 10);
