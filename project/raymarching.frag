@@ -275,7 +275,7 @@ vec4 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
     }
 
     // TODO: Figure out how to properly simulate how much of the light from the planet's surface that is scattered away from the camera
-    float originalColorTransmittance = 1;
+    float originalColorTransmittance = exp(-viewRayOpticalDepth);
 
     return originalColor * originalColorTransmittance + vec4(inScatteredLight, 0);
 }

@@ -48,7 +48,7 @@ GLuint depthProgram;  // Shader used to draw the shadow map
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
-vec3 cameraPosition(0.0f, 0.0f, -30);
+vec3 cameraPosition(0.0f, 0.0f, -50);
 vec3 cameraDirection = normalize(vec3(0.0f) + cameraPosition);
 vec3 cameraRight = cross(cameraDirection, worldUp);
 vec3 cameraUp = cross(cameraRight, cameraDirection);
@@ -79,12 +79,12 @@ float samplingIncreaseDepth = 5.0f;
 float samplingFalloffDistance = 10.0f;
 
 // Scene parameters
-float cloudMovementSpeed = 0.0f;
+float cloudMovementSpeed = 0.05f;
 float cloudTime = 0.0f;
-float planetRadius = 10.0f;
-float cloudlessDepth = 0.5f;
+float planetRadius = 15.0f;
+float cloudlessDepth = 2.2f;
 float cloudDepth = 1.0f;
-float cloudScale = 0.72f;
+float cloudScale = 0.4f;
 float cloudStepMin = 0.01f;
 float cloudStepMax = 0.46f;
 float cloudShadowIntensity = 2.5f;
@@ -95,11 +95,11 @@ float cloudNoiseAmount = 0.1f;
 float sunsetCloudWidth = 0.1f;
 int cloudIterations = 6;
 int cloudShadowIterations = 4;
-float atmosphereDepth = 5.6f;
-float atmosphereDensityFalloff = 5.5f;
+float atmosphereDepth = 10.0f;
+float atmosphereDensityFalloff = 3.0f;
 vec3 colorBandWavelengths = vec3(700, 530, 440);
 float atmosphereScatteringStrength = 3.0f;
-float atmosphereDensityAtSeaLevel = 0.5f;
+float atmosphereDensityAtSeaLevel = 0.17f;
 float pointLightIntensityMultiplier = 0.8f;
 
 // Shadow map
@@ -169,7 +169,7 @@ void loadNoiseTexture(const std::string& filepath)
 void initializePlanet()
 {
 	planetModel = labhelper::loadModelFromOBJ("../scenes/planet.obj");
-	planetModelMatrix = scale(vec3(planetRadius - 1));
+	planetModelMatrix = scale(vec3(planetRadius));
 	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
 	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
 }
@@ -428,7 +428,7 @@ void display(void)
 	glViewport(0, 0, rasterizedFBO.width, rasterizedFBO.height);
 	glClearColor(0, 0, 0, 0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	planetModelMatrix = scale(vec3(planetRadius - 1));
+	planetModelMatrix = scale(vec3(planetRadius));
 	drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
 	{
 		labhelper::perf::Scope s("Ray Marching");
