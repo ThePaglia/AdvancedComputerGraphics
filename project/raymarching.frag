@@ -43,11 +43,6 @@ uniform int cloudShadowIterations = 4;
 const float MARCH_SIZE = 0.08;
 const float ATMOSPHERE_MARCH_SIZE = 100.0;
 
-// Sampling
-uniform float samplingIncreaseFactor;
-uniform float samplingIncreaseDepth;
-uniform float samplingFalloffDistance;
-
 // Scene parameters
 const float cloudHeight = 10.0;
 const float cloudBoxWidth = 200.0;
