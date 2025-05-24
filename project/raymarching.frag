@@ -72,6 +72,12 @@ uniform float atmosphereDensityAtSeaLevel = 0.5;
 const float atmosphereRadius = planetRadius + atmosphereDepth;
 vec3 sunDirection = normalize(lightPosition);
 
+// MIE Scattering parameters
+#define PI 3.1415926538
+// Try values between 0.75 and 0.99
+uniform float mieG;
+uniform float mieIntensity;
+
 float sdSphere(vec3 p, float radius) {
     return length(p) - radius;
 }
@@ -280,6 +286,12 @@ vec4 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
     return originalColor * originalColorTransmittance + vec4(inScatteredLight, 0);
 }
 
+// Heneye Greenstein phase function for MIE scattering
+float HenyeyGreenstein(float g, float cosTheta) {
+    float gg = g*g;
+    return (1.0 / (4.0 * PI))  * ((1.0 - gg) / pow(1.0 + gg - 2.0 * g * cosTheta, 1.5));
+}
+
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
     float rayDotCam = dot(rayDirection, cameraForward);
     float rayDotCloudPlane = dot(rayDirection, normalize(rayDirection * vec3(1, 0, 1)));
@@ -399,9 +411,17 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 vec3 sunsetColor = vec3(1.0, 0.5, 0.2);
                 // Interpolate between sunset and overhead color based on angle
                 vec3 sunColor = mix(sunsetColor, directionalLightColor, sunViewFactor);
+                
+                // Mie Scattering
+                float mieCosTheta = dot(rayDirection, sunDirection);
+                float miePhase = HenyeyGreenstein(mieG, mieCosTheta);
 
                 // Use sunColor in the cloud lighting calculation
-                vec3 lin = ambientColor * ambientIntensity + directionalLightIntensityMultiplier * directionalLightColor * sunColor * diffuse;
+                vec3 ambientTerm = ambientColor * ambientIntensity;
+                vec3 lambert = directionalLightIntensityMultiplier * directionalLightColor * sunColor * diffuse;
+                vec3 mieScattering = mieIntensity * miePhase * directionalLightColor * sunColor;
+                vec3 lin = ambientTerm + lambert + mieScattering;
+
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
                 color.rgb *= lin;
                 color.rgb *= color.a;

@@ -101,6 +101,8 @@ vec3 colorBandWavelengths = vec3(700, 530, 440);
 float atmosphereScatteringStrength = 3.0f;
 float atmosphereDensityAtSeaLevel = 0.5f;
 float pointLightIntensityMultiplier = 0.8f;
+float mieIntensity = 0.2;
+float mieG = 0.76;
 
 // Shadow map
 enum ClampMode
@@ -239,6 +241,8 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereDensityAtSeaLevel", atmosphereDensityAtSeaLevel);
 	vec3 scatteringCoefficients = vec3(pow(300 / colorBandWavelengths.x, 4), pow(300 / colorBandWavelengths.y, 4), pow(300 / colorBandWavelengths.z, 4)) * atmosphereScatteringStrength;
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereScatteringCoefficients", scatteringCoefficients);
+	labhelper::setUniformSlow(currentShaderProgram, "mieIntensity", mieIntensity);
+	labhelper::setUniformSlow(currentShaderProgram, "mieG", mieG);
 
 	// Sampling
 	labhelper::setUniformSlow(currentShaderProgram, "samplingIncreaseFactor", samplingIncreaseFactor);
@@ -575,6 +579,8 @@ void gui()
 	ImGui::SliderInt("Cloud Iterations", &cloudIterations, 1, 10);
 	ImGui::SliderInt("Cloud Shadow Iterations", &cloudShadowIterations, 1, 6);
 	ImGui::SliderFloat("Sunset Cloud Width", &sunsetCloudWidth, 0.001, 1);
+	ImGui::SliderFloat("Mie Scattering Intensity", &mieIntensity, 0.0, 1.0);
+	ImGui::SliderFloat("Mie Scattering G", &mieG, 0.0, 0.999);
 	ImGui::Text("Atmosphere");
 	ImGui::SliderFloat("Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Density Falloff", &atmosphereDensityFalloff, 0, 10);
