@@ -71,6 +71,8 @@ vec3 calculateDirectIllumiunation(vec3 wo, vec3 n, vec3 base_color)
 	return pow(direct_illum, vec3(1.0 / 2.2));
 }
 
+// Approximates calculates incoming indirect illumination from the atmosphere, assuming (incorrectly) that that light is completely white
+// This assumption is needed to achieve realtime performance, we would have to calculate incoming atmospheric radiance both here and in the raymarching shader otherwise
 vec3 calculateIndirectIllumination(vec3 wo, vec3 n, vec3 base_color)
 {
 	// The idea here is to create a vector from the planet's origin towards the fragment and compare that vector to the sun direction
@@ -90,9 +92,7 @@ vec3 calculateIndirectIllumination(vec3 wo, vec3 n, vec3 base_color)
 void main()
 {
 	float visibility = 1.0;
-	float attenuation = 1.0;
 
-	// TODO: Figure out why visibility is not correctly calculated
 	visibility = textureProj(shadowMapTex, shadowMapCoord);
 
 	vec3 wo = -normalize(viewSpacePosition);

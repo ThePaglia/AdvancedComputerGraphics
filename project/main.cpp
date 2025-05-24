@@ -48,7 +48,7 @@ GLuint depthProgram;  // Shader used to draw the shadow map
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
-vec3 cameraPosition(0.0f, 0.0f, -30);
+vec3 cameraPosition(0.0f, 0.0f, -50);
 vec3 cameraDirection = normalize(vec3(0.0f) + cameraPosition);
 vec3 cameraRight = cross(cameraDirection, worldUp);
 vec3 cameraUp = cross(cameraRight, cameraDirection);
@@ -60,7 +60,7 @@ mat4 planetModelMatrix;
 labhelper::Model* landingpadModel = nullptr; // Used for debugging the light source's depth buffer
 labhelper::Model* sphereModel = nullptr;	 // Used for debug rendering the light source
 
-float cameraSpeed = 5;
+float cameraSpeed = 10;
 
 // Texture parameters
 GLuint noiseTexture;
@@ -71,35 +71,30 @@ GLuint noiseTexture;
 vec3 lightPosition = vec3(20, 40, 0);
 bool animateLight = false;
 vec3 directionalLightColor = vec3(1.0f);
-float directionalLightIntensityMultiplier = 2.0f;
-
-// Sampling parameters
-float samplingIncreaseFactor = 20.0f;
-float samplingIncreaseDepth = 5.0f;
-float samplingFalloffDistance = 10.0f;
+float directionalLightIntensityMultiplier = 1.0f;
 
 // Scene parameters
-float cloudMovementSpeed = 0.0f;
+float cloudMovementSpeed = 0.05f;
 float cloudTime = 0.0f;
-float planetRadius = 10.0f;
-float cloudlessDepth = 0.5f;
+float planetRadius = 15.0f;
+float cloudlessDepth = 2.2f;
 float cloudDepth = 1.0f;
-float cloudScale = 0.72f;
+float cloudScale = 0.4f;
 float cloudStepMin = 0.01f;
 float cloudStepMax = 0.46f;
 float cloudShadowIntensity = 2.5f;
-float cloudShadowCutoff = 0.0f;
+float cloudShadowCutoff = 0.4f;
 float cloudLightingFalloff = 0.4f;
 float cloudNoiseUVScale = 128.0f;
 float cloudNoiseAmount = 0.1f;
 float sunsetCloudWidth = 0.1f;
 int cloudIterations = 6;
 int cloudShadowIterations = 4;
-float atmosphereDepth = 5.6f;
-float atmosphereDensityFalloff = 5.5f;
+float atmosphereDepth = 10.0f;
+float atmosphereDensityFalloff = 3.0f;
 vec3 colorBandWavelengths = vec3(700, 530, 440);
 float atmosphereScatteringStrength = 3.0f;
-float atmosphereDensityAtSeaLevel = 0.5f;
+float atmosphereDensityAtSeaLevel = 0.17f;
 float pointLightIntensityMultiplier = 0.8f;
 float mieIntensity = 0.2;
 float mieG = 0.76;
@@ -113,8 +108,6 @@ enum ClampMode
 
 FboInfo shadowMapFB;
 int shadowMapResolution = 4096;
-int shadowMapClampMode = ClampMode::Border;
-bool shadowMapClampBorderShadowed = false;
 bool usePolygonOffset = true;
 bool useHardwarePCF = true;
 float polygonOffset_factor = 2.0f;
@@ -171,7 +164,7 @@ void loadNoiseTexture(const std::string& filepath)
 void initializePlanet()
 {
 	planetModel = labhelper::loadModelFromOBJ("../scenes/planet.obj");
-	planetModelMatrix = scale(vec3(planetRadius - 1));
+	planetModelMatrix = scale(vec3(planetRadius));
 	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
 	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
 }
@@ -215,7 +208,7 @@ void drawScene(GLuint currentShaderProgram,
 	// Light source
 	labhelper::setUniformSlow(currentShaderProgram, "directionalLightColor", directionalLightColor);
 	labhelper::setUniformSlow(currentShaderProgram, "directionalLightIntensityMultiplier",
-		pointLightIntensityMultiplier);
+		directionalLightIntensityMultiplier);
 	labhelper::setUniformSlow(currentShaderProgram, "lightPosition", lightPosition);
 
 	// Simulation parameters
@@ -224,7 +217,6 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "planetRadius", planetRadius);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudlessDepth", cloudlessDepth);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudDepth", cloudDepth);
-	labhelper::setUniformSlow(currentShaderProgram, "samplingFalloffDistance", samplingFalloffDistance);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudScale", cloudScale);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudStepMin", cloudStepMin);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudShadowCutoff", cloudShadowCutoff);
@@ -243,11 +235,6 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereScatteringCoefficients", scatteringCoefficients);
 	labhelper::setUniformSlow(currentShaderProgram, "mieIntensity", mieIntensity);
 	labhelper::setUniformSlow(currentShaderProgram, "mieG", mieG);
-
-	// Sampling
-	labhelper::setUniformSlow(currentShaderProgram, "samplingIncreaseFactor", samplingIncreaseFactor);
-	labhelper::setUniformSlow(currentShaderProgram, "samplingIncreaseDepth", samplingIncreaseDepth);
-	labhelper::setUniformSlow(currentShaderProgram, "samplingFalloffDistance", samplingFalloffDistance);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
@@ -365,75 +352,71 @@ void display(void)
 	///////////////////////////////////////////////////////////////////////////
 	// Set Up Shadow Map
 	///////////////////////////////////////////////////////////////////////////
-	if (shadowMapFB.width != shadowMapResolution || shadowMapFB.height != shadowMapResolution)
 	{
-		shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
-	}
+		labhelper::perf::Scope s("Shadow Map");
 
-	if (shadowMapClampMode == ClampMode::Edge)
-	{
+		if (shadowMapFB.width != shadowMapResolution || shadowMapFB.height != shadowMapResolution)
+		{
+			shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
+		}
+
 		glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	}
 
-	if (shadowMapClampMode == ClampMode::Border)
-	{
+		if (useHardwarePCF)
+		{
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		}
+		else
+		{
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		}
+
+		// This line is to avoid some warnings from OpenGL for having the shadowmap attached to texture unit 0
+		// when using a shader that samples from that texture with a sampler2D instead of a shadow sampler.
+		// It is never actually sampled, but just having it set there generates the warning in some systems.
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		///////////////////////////////////////////////////////////////////////////
+		// Draw Shadow Map
+		///////////////////////////////////////////////////////////////////////////
+		if (usePolygonOffset)
+		{
+			glEnable(GL_POLYGON_OFFSET_FILL);
+			glPolygonOffset(polygonOffset_factor, polygonOffset_units);
+		}
+
 		glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-		vec4 border(shadowMapClampBorderShadowed ? 0.f : 1.f);
-		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &border.x);
-	}
-
-	if (useHardwarePCF)
-	{
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	}
-	else
-	{
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	}
-
-	// This line is to avoid some warnings from OpenGL for having the shadowmap attached to texture unit 0
-	// when using a shader that samples from that texture with a sampler2D instead of a shadow sampler.
-	// It is never actually sampled, but just having it set there generates the warning in some systems.
-	glBindTexture(GL_TEXTURE_2D, 0);
-
-	///////////////////////////////////////////////////////////////////////////
-	// Draw Shadow Map
-	///////////////////////////////////////////////////////////////////////////
-	if (usePolygonOffset)
-	{
-		glEnable(GL_POLYGON_OFFSET_FILL);
-		glPolygonOffset(polygonOffset_factor, polygonOffset_units);
-	}
-
-	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFB.framebufferId);
-	glViewport(0, 0, shadowMapFB.width, shadowMapFB.height);
-	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-	glClearDepth(1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	drawSolidGeometry(depthProgram, lightViewMatrix, lightProjMatrix, lightViewMatrix, lightProjMatrix);
-	if (usePolygonOffset)
-	{
-		glDisable(GL_POLYGON_OFFSET_FILL);
+		glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFB.framebufferId);
+		glViewport(0, 0, shadowMapFB.width, shadowMapFB.height);
+		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+		glClearDepth(1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		drawSolidGeometry(depthProgram, lightViewMatrix, lightProjMatrix, lightViewMatrix, lightProjMatrix);
+		if (usePolygonOffset)
+		{
+			glDisable(GL_POLYGON_OFFSET_FILL);
+		}
 	}
 
 	// These following two lines are used for debugging the ligth's depthBuffer
 	// labhelper::Material& screen = landingpadModel->m_materials[8];
 	// screen.m_emission_texture.gl_id = shadowMapFB.colorTextureTargets[0];
 
-	// Draw to fbo from camera
-	glBindFramebuffer(GL_FRAMEBUFFER, rasterizedFBO.framebufferId);
-	glViewport(0, 0, rasterizedFBO.width, rasterizedFBO.height);
-	glClearColor(0, 0, 0, 0);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	planetModelMatrix = scale(vec3(planetRadius - 1));
-	drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
+	{
+		labhelper::perf::Scope s("Rasterized Graphics");
+
+		// Draw to fbo from camera
+		glBindFramebuffer(GL_FRAMEBUFFER, rasterizedFBO.framebufferId);
+		glViewport(0, 0, rasterizedFBO.width, rasterizedFBO.height);
+		glClearColor(0, 0, 0, 0);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		planetModelMatrix = scale(vec3(planetRadius));
+		drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
+	}
 	{
 		labhelper::perf::Scope s("Ray Marching");
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -560,12 +543,14 @@ void gui()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
 		ImGui::GetIO().Framerate);
 	// ----------------------------------------------------------
-	ImGui::Text("Simulation");
-	ImGui::SliderFloat("Cloud Speed", &cloudMovementSpeed, 0.0f, 1.0f);
-	ImGui::SliderFloat("Sampling Factor", &samplingIncreaseFactor, 1.0f, 100.0f);
-	ImGui::SliderFloat("Sampling Depth", &samplingIncreaseDepth, 0.0f, 100.0f);
-	ImGui::SliderFloat("Sampling Falloff", &samplingFalloffDistance, 0.1f, 100.0f);
+	ImGui::Text("Settings");
+	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
 	ImGui::SliderFloat("Planet Radius", &planetRadius, 1, 100.0f);
+
+	ImGui::Text("Clouds");
+	ImGui::SliderInt("Cloud Iterations", &cloudIterations, 1, 10);
+	ImGui::SliderInt("Cloud Shadow Iterations", &cloudShadowIterations, 1, 6);
+	ImGui::SliderFloat("Cloud Speed", &cloudMovementSpeed, 0.0f, 1.0f);
 	ImGui::SliderFloat("Cloudless Depth", &cloudlessDepth, 0.1f, 10);
 	ImGui::SliderFloat("Cloud Depth", &cloudDepth, 0.0f, 1);
 	ImGui::SliderFloat("Cloud Scale", &cloudScale, 0.1f, 1);
@@ -576,32 +561,26 @@ void gui()
 	ImGui::SliderFloat("Cloud Lighting Fraction", &cloudLightingFalloff, 0.001, 1);
 	ImGui::SliderFloat("Cloud Noise UV Scale", &cloudNoiseUVScale, 1, 2048);
 	ImGui::SliderFloat("Cloud Noise Amount", &cloudNoiseAmount, 0, 1);
-	ImGui::SliderInt("Cloud Iterations", &cloudIterations, 1, 10);
-	ImGui::SliderInt("Cloud Shadow Iterations", &cloudShadowIterations, 1, 6);
 	ImGui::SliderFloat("Sunset Cloud Width", &sunsetCloudWidth, 0.001, 1);
 	ImGui::SliderFloat("Mie Scattering Intensity", &mieIntensity, 0.0, 1.0);
 	ImGui::SliderFloat("Mie Scattering G", &mieG, 0.0, 0.999);
 	ImGui::Text("Atmosphere");
-	ImGui::SliderFloat("Depth", &atmosphereDepth, 0, 10);
+	ImGui::SliderFloat("Atmosphere Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Density Falloff", &atmosphereDensityFalloff, 0, 10);
 	ImGui::SliderFloat("Density at Sea Level", &atmosphereDensityAtSeaLevel, 0, 1);
 	ImGui::SliderFloat3("Scattering Wavelengths", (float*)&colorBandWavelengths, 0, 1000);
 	ImGui::SliderFloat("Scattering Strength", &atmosphereScatteringStrength, 0, 10);
+
+	ImGui::Text("Sun");
+	ImGui::SliderFloat("Sun Intensity", &directionalLightIntensityMultiplier, 0, 2);
 	ImGui::Checkbox("Animate light", &animateLight);
 	ImGui::SliderFloat3("Sun Position", (float*)&lightPosition, -100, 100);
-	ImGui::Text("Controls");
-	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
-	ImGui::Text("Shadow Map Settings");
 	ImGui::SliderInt("Shadow Map Resolution", &shadowMapResolution, 32, 4096);
-	ImGui::Text("Polygon Offset");
 	ImGui::Checkbox("Use polygon offset", &usePolygonOffset);
 	ImGui::SliderFloat("Factor", &polygonOffset_factor, 0.0f, 10.0f);
 	ImGui::SliderFloat("Units", &polygonOffset_units, 0.0f, 100000.0f);
-	ImGui::Text("Clamp Mode");
-	ImGui::RadioButton("Clamp to edge", &shadowMapClampMode, ClampMode::Edge);
-	ImGui::RadioButton("Clamp to border", &shadowMapClampMode, ClampMode::Border);
-	ImGui::Checkbox("Border as shadow", &shadowMapClampBorderShadowed);
 	ImGui::Checkbox("Use hardware PCF", &useHardwarePCF);
+
 	labhelper::perf::drawEventsWindow();
 }
 

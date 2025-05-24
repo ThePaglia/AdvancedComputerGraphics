@@ -43,11 +43,6 @@ uniform int cloudShadowIterations = 4;
 const float MARCH_SIZE = 0.08;
 const float ATMOSPHERE_MARCH_SIZE = 100.0;
 
-// Sampling
-uniform float samplingIncreaseFactor;
-uniform float samplingIncreaseDepth;
-uniform float samplingFalloffDistance;
-
 // Scene parameters
 const float cloudHeight = 10.0;
 const float cloudBoxWidth = 200.0;
@@ -281,7 +276,7 @@ vec4 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
     }
 
     // TODO: Figure out how to properly simulate how much of the light from the planet's surface that is scattered away from the camera
-    float originalColorTransmittance = 1;
+    float originalColorTransmittance = exp(-viewRayOpticalDepth);
 
     return originalColor * originalColorTransmittance + vec4(inScatteredLight, 0);
 }
@@ -423,9 +418,8 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 vec3 lin = ambientTerm + lambert + mieScattering;
 
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
-                color.rgb *= lin;
+                color.rgb *= lin * shadowMultiplier;
                 color.rgb *= color.a;
-                color.rgb *= shadowMultiplier;
                 color *= exp(-viewRayOpticalDepth); // Not sure if this is the best way of multiplying the contribution of the viewRayOpticalDepth as it affects the transparency
                 volumetricRes += color * (1.0 - volumetricRes.a);
 
