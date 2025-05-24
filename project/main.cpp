@@ -97,7 +97,7 @@ vec3 colorBandWavelengths = vec3(700, 530, 440);
 float atmosphereScatteringStrength = 3.0f;
 float atmosphereDensityAtSeaLevel = 0.17f;
 float pointLightIntensityMultiplier = 0.8f;
-float mieIntensity = 0.2;
+float mieIntensity = 0.32;
 float mieG = 0.76;
 
 // Shadow map
@@ -316,18 +316,6 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	labhelper::render(shipModel);
 }
 
-void debugDrawLight(const glm::mat4& viewMatrix,
-	const glm::mat4& projectionMatrix,
-	const glm::vec3& worldSpaceLightPos)
-{
-	glFrontFace(GL_CW); // The models are rendered inside out so we flip what is considered to be the front face
-	mat4 modelMatrix = glm::translate(worldSpaceLightPos);
-	glUseProgram(shaderProgram);
-	labhelper::setUniformSlow(shaderProgram, "modelViewProjectionMatrix",
-		projectionMatrix * viewMatrix * modelMatrix);
-	labhelper::render(sphereModel);
-}
-
 // This function will be called once per frame, so the code to set up
 // the scene for rendering should go here
 void display(void)
@@ -448,7 +436,6 @@ void display(void)
 		drawScene(raymarchingProgram, viewMatrix, projMatrix);
 	}
 
-	debugDrawLight(viewMatrix, projMatrix, vec3(lightPosition));
 }
 
 // This function is used to update the scene according to user input
