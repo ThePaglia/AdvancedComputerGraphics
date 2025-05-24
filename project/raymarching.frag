@@ -403,9 +403,8 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 // Use sunColor in the cloud lighting calculation
                 vec3 lin = ambientColor * ambientIntensity + directionalLightIntensityMultiplier * directionalLightColor * sunColor * diffuse;
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
-                color.rgb *= lin;
+                color.rgb *= lin * shadowMultiplier;
                 color.rgb *= color.a;
-                color.rgb *= shadowMultiplier;
                 color *= exp(-viewRayOpticalDepth); // Not sure if this is the best way of multiplying the contribution of the viewRayOpticalDepth as it affects the transparency
                 volumetricRes += color * (1.0 - volumetricRes.a);
 

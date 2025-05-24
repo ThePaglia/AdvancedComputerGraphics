@@ -60,7 +60,7 @@ mat4 planetModelMatrix;
 labhelper::Model* landingpadModel = nullptr; // Used for debugging the light source's depth buffer
 labhelper::Model* sphereModel = nullptr;	 // Used for debug rendering the light source
 
-float cameraSpeed = 5;
+float cameraSpeed = 10;
 
 // Texture parameters
 GLuint noiseTexture;
@@ -361,75 +361,83 @@ void display(void)
 	///////////////////////////////////////////////////////////////////////////
 	// Set Up Shadow Map
 	///////////////////////////////////////////////////////////////////////////
-	if (shadowMapFB.width != shadowMapResolution || shadowMapFB.height != shadowMapResolution)
 	{
-		shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
-	}
+		labhelper::perf::Scope s("Shadow Map");
 
-	if (shadowMapClampMode == ClampMode::Edge)
-	{
+		if (shadowMapFB.width != shadowMapResolution || shadowMapFB.height != shadowMapResolution)
+		{
+			shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
+		}
+
+		if (shadowMapClampMode == ClampMode::Edge)
+		{
+			glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		}
+
+		if (shadowMapClampMode == ClampMode::Border)
+		{
+			glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+			vec4 border(shadowMapClampBorderShadowed ? 0.f : 1.f);
+			glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &border.x);
+		}
+
+		if (useHardwarePCF)
+		{
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		}
+		else
+		{
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		}
+
+		// This line is to avoid some warnings from OpenGL for having the shadowmap attached to texture unit 0
+		// when using a shader that samples from that texture with a sampler2D instead of a shadow sampler.
+		// It is never actually sampled, but just having it set there generates the warning in some systems.
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		///////////////////////////////////////////////////////////////////////////
+		// Draw Shadow Map
+		///////////////////////////////////////////////////////////////////////////
+		if (usePolygonOffset)
+		{
+			glEnable(GL_POLYGON_OFFSET_FILL);
+			glPolygonOffset(polygonOffset_factor, polygonOffset_units);
+		}
+
 		glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	}
-
-	if (shadowMapClampMode == ClampMode::Border)
-	{
-		glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-		vec4 border(shadowMapClampBorderShadowed ? 0.f : 1.f);
-		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &border.x);
-	}
-
-	if (useHardwarePCF)
-	{
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	}
-	else
-	{
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	}
-
-	// This line is to avoid some warnings from OpenGL for having the shadowmap attached to texture unit 0
-	// when using a shader that samples from that texture with a sampler2D instead of a shadow sampler.
-	// It is never actually sampled, but just having it set there generates the warning in some systems.
-	glBindTexture(GL_TEXTURE_2D, 0);
-
-	///////////////////////////////////////////////////////////////////////////
-	// Draw Shadow Map
-	///////////////////////////////////////////////////////////////////////////
-	if (usePolygonOffset)
-	{
-		glEnable(GL_POLYGON_OFFSET_FILL);
-		glPolygonOffset(polygonOffset_factor, polygonOffset_units);
-	}
-
-	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFB.framebufferId);
-	glViewport(0, 0, shadowMapFB.width, shadowMapFB.height);
-	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-	glClearDepth(1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	drawSolidGeometry(depthProgram, lightViewMatrix, lightProjMatrix, lightViewMatrix, lightProjMatrix);
-	if (usePolygonOffset)
-	{
-		glDisable(GL_POLYGON_OFFSET_FILL);
+		glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFB.framebufferId);
+		glViewport(0, 0, shadowMapFB.width, shadowMapFB.height);
+		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+		glClearDepth(1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		drawSolidGeometry(depthProgram, lightViewMatrix, lightProjMatrix, lightViewMatrix, lightProjMatrix);
+		if (usePolygonOffset)
+		{
+			glDisable(GL_POLYGON_OFFSET_FILL);
+		}
 	}
 
 	// These following two lines are used for debugging the ligth's depthBuffer
 	// labhelper::Material& screen = landingpadModel->m_materials[8];
 	// screen.m_emission_texture.gl_id = shadowMapFB.colorTextureTargets[0];
 
-	// Draw to fbo from camera
-	glBindFramebuffer(GL_FRAMEBUFFER, rasterizedFBO.framebufferId);
-	glViewport(0, 0, rasterizedFBO.width, rasterizedFBO.height);
-	glClearColor(0, 0, 0, 0);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	planetModelMatrix = scale(vec3(planetRadius));
-	drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
+	{
+		labhelper::perf::Scope s("Rasterized Graphics");
+
+		// Draw to fbo from camera
+		glBindFramebuffer(GL_FRAMEBUFFER, rasterizedFBO.framebufferId);
+		glViewport(0, 0, rasterizedFBO.width, rasterizedFBO.height);
+		glClearColor(0, 0, 0, 0);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		planetModelMatrix = scale(vec3(planetRadius));
+		drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
+	}
 	{
 		labhelper::perf::Scope s("Ray Marching");
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
