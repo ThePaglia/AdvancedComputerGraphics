@@ -396,7 +396,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
                 float sunViewFactor = clamp((dotSunPlanet - sunsetCloudWidth) * (1 / sunsetCloudWidth), 0, 1);
                 // Define the "sunset" color (orange/red) and white for overhead sun
-                vec3 sunsetColor = vec3(1.0, 0.5, 0.2) * 1.5f;
+                vec3 sunsetColor = vec3(1.0, 0.5, 0.2);
                 // Interpolate between sunset and overhead color based on angle
                 vec3 sunColor = mix(sunsetColor, directionalLightColor, sunViewFactor);
 
