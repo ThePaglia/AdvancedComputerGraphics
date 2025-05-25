@@ -7,7 +7,7 @@ uniform float uTime;
 uniform vec2 uResolution;
 uniform sampler2D uSceneColor; // Result from rasterization step
 uniform sampler2D uSceneDepth; // Result from rasterization step
-uniform sampler2D uNoiseTexture;
+uniform sampler2D uWhiteNoiseTexture;
 
 // These are values retrieved from the previous rasterized step
 vec3 sceneColor;
@@ -84,7 +84,7 @@ float noise(vec3 x) {
     f = f * f * (3.0 - 2.0 * f);
 
     vec2 uv = (p.xy + vec2(37.0, 239.0) * p.z) + f.xy;
-    vec2 tex = textureLod(uNoiseTexture, (uv + 0.5) / textureSize(uNoiseTexture, 0), 0.0).yx;
+    vec2 tex = textureLod(uWhiteNoiseTexture, (uv + 0.5) / textureSize(uWhiteNoiseTexture, 0), 0.0).yx;
     return mix(tex.x, tex.y, f.z) * 2.0 - 1.0;
 }
 
@@ -494,7 +494,7 @@ void main() {
 
     // 6. Raymarching
     vec3 color = vec3(0.0);
-    float blueNoise = texture2D(uNoiseTexture, gl_FragCoord.xy / cloudNoiseUVScale).r;
+    float blueNoise = texture2D(uWhiteNoiseTexture, gl_FragCoord.xy / cloudNoiseUVScale).r;
     float offset = fract(blueNoise);
     vec4 res = raymarch(rayOrigin, rayDirection, uCameraDir, offset);
     color = res.rgb;

@@ -64,7 +64,7 @@ labhelper::Model* shipModel = nullptr;
 float cameraSpeed = 10;
 
 // Texture parameters
-GLuint noiseTexture;
+GLuint whiteNoiseTexture;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Light source
@@ -141,7 +141,7 @@ void loadShaders(bool is_reload)
 	}
 }
 
-void loadNoiseTexture(const std::string& filepath)
+void loadNoiseTexture(const std::string& filepath, GLuint& texture)
 {
 	int width, height, channels;
 	unsigned char* data = stbi_load(filepath.c_str(), &width, &height, &channels, 0);
@@ -151,8 +151,8 @@ void loadNoiseTexture(const std::string& filepath)
 		return;
 	}
 
-	glGenTextures(1, &noiseTexture);
-	glBindTexture(GL_TEXTURE_2D, noiseTexture);
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -183,7 +183,7 @@ void initialize()
 	initializePlanet();
 
 	// Load noise texture
-	loadNoiseTexture("../textures/noise.png");
+	loadNoiseTexture("../textures/whiteNoise.png", whiteNoiseTexture);
 
 	// Shadow map
 	shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
@@ -205,8 +205,8 @@ void drawScene(GLuint currentShaderProgram,
 
 	// Bind the noise texture
 	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, noiseTexture);
-	labhelper::setUniformSlow(currentShaderProgram, "uNoiseTexture", 2);
+	glBindTexture(GL_TEXTURE_2D, whiteNoiseTexture);
+	labhelper::setUniformSlow(currentShaderProgram, "uWhiteNoiseTexture", 2);
 
 	// Light source
 	labhelper::setUniformSlow(currentShaderProgram, "directionalLightColor", directionalLightColor);
