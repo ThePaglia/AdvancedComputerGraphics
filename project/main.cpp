@@ -99,6 +99,7 @@ float atmosphereDensityAtSeaLevel = 0.17f;
 float pointLightIntensityMultiplier = 0.8f;
 float mieIntensity = 0.32;
 float mieG = 0.76;
+bool beerPowderLaw = false;
 
 // Shadow map
 enum ClampMode
@@ -237,6 +238,7 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereScatteringCoefficients", scatteringCoefficients);
 	labhelper::setUniformSlow(currentShaderProgram, "mieIntensity", mieIntensity);
 	labhelper::setUniformSlow(currentShaderProgram, "mieG", mieG);
+	labhelper::setUniformSlow(currentShaderProgram, "beerPowderLaw", beerPowderLaw);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
@@ -435,7 +437,6 @@ void display(void)
 
 		drawScene(raymarchingProgram, viewMatrix, projMatrix);
 	}
-
 }
 
 // This function is used to update the scene according to user input
@@ -564,6 +565,7 @@ void gui()
 	ImGui::SliderFloat("Sunset Cloud Width", &sunsetCloudWidth, 0.001, 1);
 	ImGui::SliderFloat("Mie Scattering Intensity", &mieIntensity, 0.0, 1.0);
 	ImGui::SliderFloat("Mie Scattering G", &mieG, 0.0, 0.999);
+	ImGui::Checkbox("Beer-Powder Law", &beerPowderLaw);
 	ImGui::Text("Atmosphere");
 	ImGui::SliderFloat("Atmosphere Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Density Falloff", &atmosphereDensityFalloff, 0, 10);

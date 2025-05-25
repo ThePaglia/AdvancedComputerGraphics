@@ -72,6 +72,7 @@ vec3 sunDirection = normalize(lightPosition);
 // Try values between 0.75 and 0.99
 uniform float mieG;
 uniform float mieIntensity;
+uniform bool beerPowderLaw;
 
 float sdSphere(vec3 p, float radius) {
     return length(p) - radius;
@@ -420,7 +421,12 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
                 color.rgb *= lin * shadowMultiplier;
                 color.rgb *= color.a;
-                color *= exp(-viewRayOpticalDepth); // Not sure if this is the best way of multiplying the contribution of the viewRayOpticalDepth as it affects the transparency
+                // TODO: Let me know if it looks better to you
+                if (beerPowderLaw) {
+                    color *= exp(-viewRayOpticalDepth * (1.0 - exp(-viewRayOpticalDepth * 2.0))); // Not sure if this is the best way of multiplying the contribution of the viewRayOpticalDepth as it affects the transparency
+                } else {
+                    color *= exp(-viewRayOpticalDepth);
+                }
                 volumetricRes += color * (1.0 - volumetricRes.a);
 
                 // We can immediately break out of the loop if the transparency is greater than this treshold, the reasoning is that any further steps would contribute an insignificant amount to the pixel color
