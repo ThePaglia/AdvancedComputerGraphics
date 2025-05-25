@@ -58,7 +58,7 @@ uniform float atmosphereDepth = 3.0;
 uniform float cloudStepMin = 0.1;
 uniform float cloudStepMax = 0.8;
 uniform float cloudLightingFalloff = 0.5;
-uniform float sunsetCloudWidth = 0.2f;
+uniform float sunsetCloudWidth = 0.2;
 uniform float atmosphereDensityFalloff = 2.0;
 uniform vec3 atmosphereScatteringCoefficients = vec3(0.0, 0.0, 0.0);
 uniform float atmosphereDensityAtSeaLevel = 0.5;
@@ -284,8 +284,8 @@ vec4 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
 
 // Heneye Greenstein phase function for MIE scattering
 float HenyeyGreenstein(float g, float cosTheta) {
-    float gg = g*g;
-    return (1.0 / (4.0 * PI))  * ((1.0 - gg) / pow(1.0 + gg - 2.0 * g * cosTheta, 1.5));
+    float gg = g * g;
+    return (1.0 / (4.0 * PI)) * ((1.0 - gg) / pow(1.0 + gg - 2.0 * g * cosTheta, 1.5));
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
@@ -407,7 +407,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 vec3 sunsetColor = vec3(1.0, 0.5, 0.2);
                 // Interpolate between sunset and overhead color based on angle
                 vec3 sunColor = mix(sunsetColor, directionalLightColor, sunViewFactor);
-                
+
                 // Mie Scattering
                 float mieCosTheta = dot(rayDirection, sunDirection);
                 float miePhase = HenyeyGreenstein(mieG, mieCosTheta);
@@ -422,7 +422,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 color.rgb *= lin * shadowMultiplier;
                 color.rgb *= color.a;
                 // TODO: Let me know if it looks better to you
-                if (beerPowderLaw) {
+                if(beerPowderLaw) {
                     color *= exp(-viewRayOpticalDepth * (1.0 - exp(-viewRayOpticalDepth * 2.0))); // Not sure if this is the best way of multiplying the contribution of the viewRayOpticalDepth as it affects the transparency
                 } else {
                     color *= exp(-viewRayOpticalDepth);
