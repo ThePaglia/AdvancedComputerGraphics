@@ -309,9 +309,11 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         if(tEnterWater < opaqueDepth) {
             float opaqueT = min(tEnterWater < 0 ? tExitWater : tEnterWater, opaqueDepth);
             opaquePoint = rayOrigin + rayDirection * opaqueT;
-            opaqueDepth = opaqueT;
 
-            vec3 waterColor = mix(vec3(0.553, 0.949, 1), vec3(0.024, 0.475, 0.529), clamp((opaqueDepth - max(tEnterWater, 0)) / 3f, 0, 1));
+            // NOTE: This method for calculating the water color works... okay if you are above the water line
+            vec3 waterColor = mix(vec3(0.553, 0.949, 1), vec3(0.012, 0.012, 0.2), clamp((opaqueDepth - max(tEnterWater, 0)) / 3f, 0, 1));
+
+            opaqueDepth = opaqueT;
             
 	        vec3 planetNormal = normalize(opaquePoint - planetOrigin);
 
