@@ -34,12 +34,10 @@ int windowWidth, windowHeight;
 // Mouse input
 bool g_doMouseLookaround = false;
 
-// Shader programs
-GLuint raymarchingProgram;
-
 ///////////////////////////////////////////////////////////////////////////////
 // Shader programs
 ///////////////////////////////////////////////////////////////////////////////
+GLuint raymarchingProgram; // Shader for rendering all ray marched effects (clouds, cloud shadows & atmosphere)
 GLuint shaderProgram; // Shader for rendering the final image
 GLuint depthProgram;  // Shader used to draw the shadow map
 GLuint simpleProgram; // Shader used for testing
@@ -53,8 +51,6 @@ vec3 cameraUp = cross(cameraRight, cameraDirection);
 mat4 viewProjMatrix;
 
 // Model parameters
-labhelper::Model *planetModel = nullptr;
-mat4 planetModelMatrix;
 labhelper::Model *landingpadModel = nullptr; // Used for debugging the light source's depth buffer
 labhelper::Model *sphereModel = nullptr;	 // Used for debug rendering the light source
 labhelper::Model *shipModel = nullptr;
@@ -72,7 +68,7 @@ bool animateLight = false;
 vec3 directionalLightColor = vec3(1.0f);
 float directionalLightIntensityMultiplier = 1.0f;
 
-// Scene parameters
+// Cloud parameters
 float cloudMovementSpeed = 0.05f;
 float cloudTime = 0.0f;
 float planetRadius = 15.0f;
@@ -89,23 +85,19 @@ float cloudNoiseAmount = 0.1f;
 float sunsetCloudWidth = 0.1f;
 int cloudIterations = 6;
 int cloudShadowIterations = 4;
+float mieIntensity = 0.32f;
+float mieG = 0.76f;
+bool beerPowderLaw = false;
+
+// Atmosphere parameters
 float atmosphereDepth = 10.0f;
 float atmosphereDensityFalloff = 3.0f;
 vec3 colorBandWavelengths = vec3(700, 530, 440);
 float atmosphereScatteringStrength = 3.0f;
 float atmosphereDensityAtSeaLevel = 0.17f;
 float pointLightIntensityMultiplier = 0.8f;
-float mieIntensity = 0.32f;
-float mieG = 0.76f;
-bool beerPowderLaw = false;
 
-// Shadow map
-enum ClampMode
-{
-	Edge = 1,
-	Border = 2
-};
-
+// Shadow map settings
 FboInfo shadowMapFB;
 int shadowMapResolution = 4096;
 bool usePolygonOffset = true;
@@ -118,61 +110,13 @@ FboInfo rasterizedFBO;
 GLuint colorTex;
 GLuint depthTex;
 
-void loadShaders(bool is_reload)
-{
-	GLuint shader = labhelper::loadShaderProgram("../project/depth.vert", "../project/depth.frag", is_reload);
-	if (shader != 0)
-	{
-		depthProgram = shader;
-	}
-
-	shader = labhelper::loadShaderProgram("../project/shading.vert", "../project/shading.frag", is_reload);
-	if (shader != 0)
-	{
-		shaderProgram = shader;
-	}
-
-	shader = labhelper::loadShaderProgram("../project/raymarching.vert", "../project/raymarching.frag", is_reload);
-	if (shader != 0)
-	{
-		raymarchingProgram = shader;
-	}
-
-	shader = labhelper::loadShaderProgram("../project/simple.vert", "../project/simple.frag", is_reload);
-	if (shader != 0)
-	{
-		simpleProgram = shader;
-	}
-}
-
-void loadNoiseTexture(const std::string &filepath, GLuint &texture)
-{
-	int width, height, channels;
-	unsigned char *data = stbi_load(filepath.c_str(), &width, &height, &channels, 0);
-	if (!data)
-	{
-		std::cerr << "Failed to load texture: " << filepath << std::endl;
-		return;
-	}
-
-	glGenTextures(1, &texture);
-	glBindTexture(GL_TEXTURE_2D, texture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-	glGenerateMipmap(GL_TEXTURE_2D);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-	stbi_image_free(data);
-}
-
-GLuint positionBuffer, indexBuffer, normalBuffer, vertexArrayObject;
-
+// Planet buffers etc.
+GLuint planetPositionBuffer, planetIndexBuffer, planetNormalBuffer, planetVAO;
 std::vector<vec3> planetVertices;
 std::vector<vec3> planetNormals;
 std::vector<vec2> planetUVs;
 std::vector<unsigned int> planetIndices;
+mat4 planetModelMatrix;
 
 // Taken from https://gist.github.com/Pikachuxxxx/5c4c490a7d7679824e0e18af42918efc since this is a solved problem
 void generateSphereSmooth(int radius, int latitudes, int longitudes)
@@ -272,52 +216,98 @@ void generateSphereSmooth(int radius, int latitudes, int longitudes)
 
 void initializePlanet()
 {
-	planetModel = labhelper::loadModelFromOBJ("../scenes/planet.obj");
-	planetModelMatrix = scale(vec3(planetRadius));
-	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
-	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
-	shipModel = labhelper::loadModelFromOBJ("../scenes/NewShip.obj");
-
-
+	generateSphereSmooth(1, 50, 50);
 
 	///////////////////////////////////////////////////////////////////////////
 	// Create the vertex array object
 	///////////////////////////////////////////////////////////////////////////
 	// Create a handle for the vertex array object
-	glGenVertexArrays(1, &vertexArrayObject);
+	glGenVertexArrays(1, &planetVAO);
 	// Set it as current, i.e., related calls will affect this object
-	glBindVertexArray(vertexArrayObject);
-
-	generateSphereSmooth(1, 50, 50);
+	glBindVertexArray(planetVAO);
 
 	// Create a handle for the vertex position buffer
-	glGenBuffers(1, &positionBuffer);
+	glGenBuffers(1, &planetPositionBuffer);
 	// Set the newly created buffer as the current one
-	glBindBuffer(GL_ARRAY_BUFFER, positionBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, planetPositionBuffer);
 	// Send the vertex position data to the current buffer
-	glBufferData(GL_ARRAY_BUFFER, planetVertices.size() * sizeof(vec3), planetVertices.data(),
-		GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, planetVertices.size() * sizeof(vec3), planetVertices.data(), GL_STATIC_DRAW);
 	glVertexAttribPointer(0, 3, GL_FLOAT, false /*normalized*/, 0 /*stride*/, 0 /*offset*/);
 	// Enable the attribute
 	glEnableVertexAttribArray(0);
 
 	// Create a handle for the normal buffer
-	glGenBuffers(1, &normalBuffer);
+	glGenBuffers(1, &planetNormalBuffer);
 	// Set the newly created buffer as the current one
-	glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, planetNormalBuffer);
 	// Send the vertex normal data to the current buffer
-	glBufferData(GL_ARRAY_BUFFER, planetNormals.size() * sizeof(vec3), planetNormals.data(),
-		GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, planetNormals.size() * sizeof(vec3), planetNormals.data(), GL_STATIC_DRAW);
 	glVertexAttribPointer(1, 3, GL_FLOAT, false /*normalized*/, 0 /*stride*/, 0 /*offset*/);
 	// Enable the attribute
 	glEnableVertexAttribArray(1);
 
 	// Finally, set the planet's indices
-	glGenBuffers(1, &indexBuffer);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+	glGenBuffers(1, &planetIndexBuffer);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planetIndexBuffer);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, planetIndices.size() * sizeof(unsigned int), planetIndices.data(),
 		GL_STATIC_DRAW);
 }
+
+void loadModels() {
+	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
+	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
+	shipModel = labhelper::loadModelFromOBJ("../scenes/NewShip.obj");
+}
+
+void loadShaders(bool is_reload)
+{
+	GLuint shader = labhelper::loadShaderProgram("../project/depth.vert", "../project/depth.frag", is_reload);
+	if (shader != 0)
+	{
+		depthProgram = shader;
+	}
+
+	shader = labhelper::loadShaderProgram("../project/shading.vert", "../project/shading.frag", is_reload);
+	if (shader != 0)
+	{
+		shaderProgram = shader;
+	}
+
+	shader = labhelper::loadShaderProgram("../project/raymarching.vert", "../project/raymarching.frag", is_reload);
+	if (shader != 0)
+	{
+		raymarchingProgram = shader;
+	}
+
+	shader = labhelper::loadShaderProgram("../project/simple.vert", "../project/simple.frag", is_reload);
+	if (shader != 0)
+	{
+		simpleProgram = shader;
+	}
+}
+
+void loadNoiseTexture(const std::string& filepath, GLuint& texture)
+{
+	int width, height, channels;
+	unsigned char* data = stbi_load(filepath.c_str(), &width, &height, &channels, 0);
+	if (!data)
+	{
+		std::cerr << "Failed to load texture: " << filepath << std::endl;
+		return;
+	}
+
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+	glGenerateMipmap(GL_TEXTURE_2D);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	stbi_image_free(data);
+}
+
 
 // This function is called once at the start of the program and never again
 void initialize()
@@ -327,6 +317,10 @@ void initialize()
 	// Load Shaders
 	loadShaders(false);
 
+	// Load models
+	loadModels();
+
+	// Initialize the planet
 	initializePlanet();
 
 	// Load noise texture
@@ -343,7 +337,7 @@ void initialize()
 }
 
 // This function is used to draw the main objects on the scene
-void drawScene(GLuint currentShaderProgram)
+void drawFullscreenQuad(GLuint currentShaderProgram)
 {
 	glUseProgram(currentShaderProgram);
 	glFrontFace(GL_CCW); // The drawing order is flipped for the full-screen quad used for raymarching
@@ -398,7 +392,7 @@ void drawScene(GLuint currentShaderProgram)
 	labhelper::drawFullScreenQuad();
 }
 
-void drawSolidGeometry(GLuint currentShaderProgram,
+void drawScene(GLuint currentShaderProgram,
 					   const mat4 &viewMatrix,
 					   const mat4 &projectionMatrix,
 					   const mat4 &lightViewMatrix,
@@ -417,15 +411,14 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	// Light source
 	vec4 viewSpaceLightPosition = viewMatrix * vec4(lightPosition, 1.0f);
 	labhelper::setUniformSlow(currentShaderProgram, "directional_light_color", directionalLightColor);
-	labhelper::setUniformSlow(currentShaderProgram, "directional_light_intensity_multiplier",
-							  directionalLightIntensityMultiplier);
+	labhelper::setUniformSlow(currentShaderProgram, "directional_light_intensity_multiplier", directionalLightIntensityMultiplier);
 	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightPosition", vec3(viewSpaceLightPosition));
-	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightDir",
-							  normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
+	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightDir", normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
 
 	// Camera
 	labhelper::setUniformSlow(currentShaderProgram, "viewInverse", inverse(viewMatrix));
 
+	// Light matrix and depth buffer texture
 	glActiveTexture(GL_TEXTURE10);
 	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
 	mat4 lightMatrix = translate(vec3(0.5f)) * scale(vec3(0.5f)) * lightProjectionMatrix * lightViewMatrix * inverse(viewMatrix);
@@ -444,30 +437,19 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 
 
 	// Planet
-	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
-							  projectionMatrix * viewMatrix * planetModelMatrix);
+	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix", projectionMatrix * viewMatrix * planetModelMatrix);
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * planetModelMatrix);
-	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
-							  inverse(transpose(viewMatrix * planetModelMatrix)));
-
-	
+	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix", inverse(transpose(viewMatrix * planetModelMatrix)));
 	labhelper::setUniformSlow(currentShaderProgram, "material_color", vec3(0.1f, 1.0f, 0.3f));
-	labhelper::setUniformSlow(currentShaderProgram, "has_color_texture", 0);
-
-	glBindVertexArray(vertexArrayObject);
+	glBindVertexArray(planetVAO);
 	glDrawElements(GL_TRIANGLES, planetIndices.size(), GL_UNSIGNED_INT, 0);
-
-	//labhelper::render(planetModel);
 
 	// Ship
 	float d = 16 + sin(cloudTime * 2) * 0.25f;
 	mat4 shipMatrix = rotate(radians(25.0f), vec3(0, 0, 1)) * translate(vec3(0, d, 0)) * scale(vec3(0.05f));
-	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
-							  projectionMatrix * viewMatrix * shipMatrix);
+	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix", projectionMatrix * viewMatrix * shipMatrix);
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * shipMatrix);
-	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
-							  inverse(transpose(viewMatrix * shipMatrix)));
-
+	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix", inverse(transpose(viewMatrix * shipMatrix)));
 	labhelper::render(shipModel);
 }
 
@@ -506,7 +488,7 @@ void display(void)
 	mat4 lightProjMatrix = ortho(-planetRadius, planetRadius, -planetRadius, planetRadius, 10.0f, 100.0f);
 
 	///////////////////////////////////////////////////////////////////////////
-	// Set Up Shadow Map
+	// Set Up and draw to Shadow Map
 	///////////////////////////////////////////////////////////////////////////
 	{
 		labhelper::perf::Scope shadowMapScope("Shadow Map");
@@ -551,7 +533,7 @@ void display(void)
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 		glClearDepth(1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		drawSolidGeometry(depthProgram, lightViewMatrix, lightProjMatrix, lightViewMatrix, lightProjMatrix);
+		drawScene(depthProgram, lightViewMatrix, lightProjMatrix, lightViewMatrix, lightProjMatrix);
 		if (usePolygonOffset)
 		{
 			glDisable(GL_POLYGON_OFFSET_FILL);
@@ -562,6 +544,9 @@ void display(void)
 	// labhelper::Material& screen = landingpadModel->m_materials[8];
 	// screen.m_emission_texture.gl_id = shadowMapFB.colorTextureTargets[0];
 
+	///////////////////////////////////////////////////////////////////////////
+	// Set Up and draw to Rasterized FBO texture
+	///////////////////////////////////////////////////////////////////////////
 	{
 		labhelper::perf::Scope rasterizationScope("Rasterized Graphics");
 
@@ -571,8 +556,12 @@ void display(void)
 		glClearColor(0, 0, 0, 0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		planetModelMatrix = scale(vec3(planetRadius));
-		drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
+		drawScene(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
 	}
+
+	///////////////////////////////////////////////////////////////////////////
+	// Set Up and draw post process Ray Marching 
+	///////////////////////////////////////////////////////////////////////////
 	{
 		labhelper::perf::Scope rayMarchingScope("Ray Marching");
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -588,7 +577,7 @@ void display(void)
 		glBindTexture(GL_TEXTURE_2D, rasterizedFBO.depthBuffer);
 		glUniform1i(glGetUniformLocation(raymarchingProgram, "uSceneDepth"), 1);
 
-		drawScene(raymarchingProgram);
+		drawFullscreenQuad(raymarchingProgram);
 	}
 }
 
@@ -775,8 +764,6 @@ int main(int argc, char *argv[])
 		// Swap front and back buffer. This frame will now been displayed.
 		SDL_GL_SwapWindow(g_window);
 	}
-
-	labhelper::freeModel(planetModel);
 
 	// Shut down everything. This includes the window and all other subsystems.
 	labhelper::shutDown(g_window);
