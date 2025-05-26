@@ -349,7 +349,7 @@ void initialize()
 }
 
 // This function is used to draw the main objects on the scene
-void drawFullscreenQuad(GLuint currentShaderProgram)
+void drawFullscreenQuad(GLuint currentShaderProgram, mat4 viewMatrix, mat4 lightViewMatrix, mat4 lightProjectionMatrix)
 {
 	glUseProgram(currentShaderProgram);
 	glFrontFace(GL_CCW); // The drawing order is flipped for the full-screen quad used for raymarching
@@ -400,6 +400,13 @@ void drawFullscreenQuad(GLuint currentShaderProgram)
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraUp", cameraUp);
 	labhelper::setUniformSlow(currentShaderProgram, "uCameraRight", cameraRight);
 	labhelper::setUniformSlow(currentShaderProgram, "uViewProjectionMatrix", viewProjMatrix);
+
+	// Light
+	glActiveTexture(GL_TEXTURE10);
+	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
+	mat4 lightMatrix = translate(vec3(0.5f)) * scale(vec3(0.5f)) * lightProjectionMatrix * lightViewMatrix * inverse(viewMatrix);
+	labhelper::setUniformSlow(currentShaderProgram, "lightMatrix", lightMatrix);
+	labhelper::setUniformSlow(currentShaderProgram, "viewMatrix", viewMatrix);
 
 	labhelper::drawFullScreenQuad();
 }
@@ -589,7 +596,7 @@ void display(void)
 		glBindTexture(GL_TEXTURE_2D, rasterizedFBO.depthBuffer);
 		glUniform1i(glGetUniformLocation(raymarchingProgram, "uSceneDepth"), 1);
 
-		drawFullscreenQuad(raymarchingProgram);
+		drawFullscreenQuad(raymarchingProgram, viewMatrix, lightViewMatrix, lightProjMatrix);
 	}
 }
 

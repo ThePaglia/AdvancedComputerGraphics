@@ -25,6 +25,9 @@ uniform mat4 uViewProjectionMatrix;
 uniform vec3 directionalLightColor;
 uniform vec3 lightPosition;
 uniform float directionalLightIntensityMultiplier;
+uniform mat4 viewMatrix;
+uniform mat4 lightMatrix;
+layout(binding = 10) uniform sampler2DShadow shadowMapTex;
 
 // Cloud
 const vec3 ambientColor = vec3(0.60, 0.60, 0.75);
@@ -294,10 +297,36 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     float distCamCloudPlane = abs(rayOrigin.y - cloudHeight);
 
     vec4 opaqueRes = vec4(sceneColor, 1);
-
     // Calculate the pixel contribution of opaque geometry
     vec3 opaquePoint = vec3(scenePoint);
     float opaqueDepth = length(rayOrigin - opaquePoint);
+
+    float tEnterWater, tExitWater;
+    float waterRadius = 13f;
+    bool isInWater = false;
+    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, waterRadius, tEnterWater, tExitWater) && tExitWater > 0) {
+        // Check if this pixel should be affected by water
+        if(tEnterWater < opaqueDepth) {
+            float opaqueT = min(tEnterWater < 0 ? tExitWater : tEnterWater, opaqueDepth);
+            opaquePoint = rayOrigin + rayDirection * opaqueT;
+            opaqueDepth = opaqueT;
+
+            vec3 waterColor = mix(vec3(0.553, 0.949, 1), vec3(0.024, 0.475, 0.529), clamp((opaqueDepth - max(tEnterWater, 0)) / 3f, 0, 1));
+            
+	        vec3 planetNormal = normalize(opaquePoint - planetOrigin);
+
+	        // The indirect light contribution is calculated in the same way as in the rasterized fragment shader
+	        float indirectLight = max(dot(planetNormal, sunDirection), 0);
+            
+            vec4 shadowMapCoord = lightMatrix * viewMatrix * vec4(opaquePoint, 1.0f);
+            float visibility = textureProj(shadowMapTex, shadowMapCoord);
+
+            opaqueRes.rgb = waterColor * visibility + indirectLight * waterColor * 0.5f;
+
+            isInWater = tEnterWater < 0;
+        }
+    }
+
     if(sceneColor != vec3(0)) {
         float cloudDensityAbove = 0;
 
@@ -322,6 +351,10 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         cloudDensityAbove *= cloudShadowIntensity;
 
         opaqueRes.rgb *= clamp(1 - cloudDensityAbove, cloudShadowCutoff, 1.0);
+    }
+
+    if(isInWater) {
+        return opaqueRes;
     }
 
     // Calculate the atmosphere lighting contribution
