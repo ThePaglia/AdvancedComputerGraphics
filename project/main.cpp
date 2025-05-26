@@ -34,9 +34,6 @@ int windowWidth, windowHeight;
 // Mouse input
 bool g_doMouseLookaround = false;
 
-// This will identify our VBO for the planet
-GLuint vertexArrayObject;
-
 // Shader programs
 GLuint raymarchingProgram;
 
@@ -45,6 +42,7 @@ GLuint raymarchingProgram;
 ///////////////////////////////////////////////////////////////////////////////
 GLuint shaderProgram; // Shader for rendering the final image
 GLuint depthProgram;  // Shader used to draw the shadow map
+GLuint simpleProgram; // Shader used for testing
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
@@ -138,6 +136,12 @@ void loadShaders(bool is_reload)
 	{
 		raymarchingProgram = shader;
 	}
+
+	shader = labhelper::loadShaderProgram("../project/simple.vert", "../project/simple.frag", is_reload);
+	if (shader != 0)
+	{
+		simpleProgram = shader;
+	}
 }
 
 void loadNoiseTexture(const std::string& filepath)
@@ -162,6 +166,109 @@ void loadNoiseTexture(const std::string& filepath)
 	stbi_image_free(data);
 }
 
+GLuint positionBuffer, indexBuffer, normalBuffer, vertexArrayObject;
+
+std::vector<vec3> planetVertices;
+std::vector<vec3> planetNormals;
+std::vector<vec2> planetUVs;
+std::vector<unsigned int> planetIndices;
+
+// Taken from https://gist.github.com/Pikachuxxxx/5c4c490a7d7679824e0e18af42918efc since this is a solved problem
+void generateSphereSmooth(int radius, int latitudes, int longitudes)
+{
+	if (longitudes < 3)
+		longitudes = 3;
+	if (latitudes < 2)
+		latitudes = 2;
+
+	std::vector<vec3> vertices;
+	std::vector<vec3> normals;
+	std::vector<vec2> uv;
+	std::vector<unsigned int> indices;
+
+	float nx, ny, nz, lengthInv = 1.0f / radius;    // normal
+	// Temporary vertex
+	struct Vertex
+	{
+		float x, y, z, s, t; // Postion and Texcoords
+	};
+
+	float deltaLatitude = M_PI / latitudes;
+	float deltaLongitude = 2 * M_PI / longitudes;
+	float latitudeAngle;
+	float longitudeAngle;
+
+	// Compute all vertices first except normals
+	for (int i = 0; i <= latitudes; ++i)
+	{
+		latitudeAngle = M_PI / 2 - i * deltaLatitude; /* Starting -pi/2 to pi/2 */
+		float xy = radius * cosf(latitudeAngle);    /* r * cos(phi) */
+		float z = radius * sinf(latitudeAngle);     /* r * sin(phi )*/
+
+		/*
+		 * We add (latitudes + 1) vertices per longitude because of equator,
+		 * the North pole and South pole are not counted here, as they overlap.
+		 * The first and last vertices have same position and normal, but
+		 * different tex coords.
+		 */
+		for (int j = 0; j <= longitudes; ++j)
+		{
+			longitudeAngle = j * deltaLongitude;
+
+			Vertex vertex;
+			vertex.x = xy * cosf(longitudeAngle);       /* x = r * cos(phi) * cos(theta)  */
+			vertex.y = xy * sinf(longitudeAngle);       /* y = r * cos(phi) * sin(theta) */
+			vertex.z = z;                               /* z = r * sin(phi) */
+			vertex.s = (float)j / longitudes;             /* s */
+			vertex.t = (float)i / latitudes;              /* t */
+			vertices.push_back(glm::vec3(vertex.x, vertex.y, vertex.z));
+			uv.push_back(glm::vec2(vertex.s, vertex.t));
+
+			// normalized vertex normal
+			nx = vertex.x * lengthInv;
+			ny = vertex.y * lengthInv;
+			nz = vertex.z * lengthInv;
+			normals.push_back(glm::vec3(nx, ny, nz));
+		}
+	}
+
+	/*
+	 *  Indices
+	 *  k1--k1+1
+	 *  |  / |
+	 *  | /  |
+	 *  k2--k2+1
+	 */
+	unsigned int k1, k2;
+	for (int i = 0; i < latitudes; ++i)
+	{
+		k1 = i * (longitudes + 1);
+		k2 = k1 + longitudes + 1;
+		// 2 Triangles per latitude block excluding the first and last longitudes blocks
+		for (int j = 0; j < longitudes; ++j, ++k1, ++k2)
+		{
+			if (i != 0)
+			{
+				indices.push_back(k1);
+				indices.push_back(k2);
+				indices.push_back(k1 + 1);
+			}
+
+			if (i != (latitudes - 1))
+			{
+				indices.push_back(k1 + 1);
+				indices.push_back(k2);
+				indices.push_back(k2 + 1);
+			}
+		}
+	}
+
+	planetVertices = vertices;
+	planetNormals = normals;
+	planetUVs = uv;
+	planetIndices = indices;
+}
+
 void initializePlanet()
 {
 	planetModel = labhelper::loadModelFromOBJ("../scenes/planet.obj");
@@ -169,6 +276,46 @@ void initializePlanet()
 	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
 	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
 	shipModel = labhelper::loadModelFromOBJ("../scenes/NewShip.obj");
+
+
+
+	///////////////////////////////////////////////////////////////////////////
+	// Create the vertex array object
+	///////////////////////////////////////////////////////////////////////////
+	// Create a handle for the vertex array object
+	glGenVertexArrays(1, &vertexArrayObject);
+	// Set it as current, i.e., related calls will affect this object
+	glBindVertexArray(vertexArrayObject);
+
+	generateSphereSmooth(1, 50, 50);
+
+	// Create a handle for the vertex position buffer
+	glGenBuffers(1, &positionBuffer);
+	// Set the newly created buffer as the current one
+	glBindBuffer(GL_ARRAY_BUFFER, positionBuffer);
+	// Send the vertex position data to the current buffer
+	glBufferData(GL_ARRAY_BUFFER, planetVertices.size() * sizeof(vec3), planetVertices.data(),
+		GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, false /*normalized*/, 0 /*stride*/, 0 /*offset*/);
+	// Enable the attribute
+	glEnableVertexAttribArray(0);
+
+	// Create a handle for the normal buffer
+	glGenBuffers(1, &normalBuffer);
+	// Set the newly created buffer as the current one
+	glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
+	// Send the vertex normal data to the current buffer
+	glBufferData(GL_ARRAY_BUFFER, planetNormals.size() * sizeof(vec3), planetNormals.data(),
+		GL_STATIC_DRAW);
+	glVertexAttribPointer(1, 3, GL_FLOAT, false /*normalized*/, 0 /*stride*/, 0 /*offset*/);
+	// Enable the attribute
+	glEnableVertexAttribArray(1);
+
+	// Finally, set the planet's indices
+	glGenBuffers(1, &indexBuffer);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, planetIndices.size() * sizeof(unsigned int), planetIndices.data(),
+		GL_STATIC_DRAW);
 }
 
 // This function is called once at the start of the program and never again
@@ -295,6 +442,7 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	labhelper::render(landingpadModel);
 	*/
 
+
 	// Planet
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
 		projectionMatrix * viewMatrix * planetModelMatrix);
@@ -302,9 +450,16 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
 		inverse(transpose(viewMatrix * planetModelMatrix)));
 
-	labhelper::render(planetModel);
+	
+	labhelper::setUniformSlow(currentShaderProgram, "material_color", vec3(0.1f, 1.0f, 0.3f));
+	labhelper::setUniformSlow(currentShaderProgram, "has_color_texture", 0);
 
-	// Planet
+	glBindVertexArray(vertexArrayObject);
+	glDrawElements(GL_TRIANGLES, planetIndices.size(), GL_UNSIGNED_INT, 0);
+
+	//labhelper::render(planetModel);
+
+	// Ship
 	float d = 16 + sin(cloudTime * 2) * 0.25f;
 	mat4 shipMatrix = rotate(radians(25.0f), vec3(0, 0, 1)) * translate(vec3(0, d, 0)) * scale(vec3(0.05f));
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",

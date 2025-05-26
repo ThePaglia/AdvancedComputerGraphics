@@ -108,7 +108,9 @@ void main()
 	vec3 direct_illumination_term = visibility * calculateDirectIllumiunation(wo, n, base_color);
 
 	// Indirect illumination
-	vec3 indirect_illumination_term = calculateIndirectIllumination(wo, n, base_color);
+	// TODO: Figure out correct way of scaling the indirect illumination, currently we just halve it to make the issue less noticeable
+	//		If we don't halve it, cloud shadows disappear when viewing them from very close on the point of the planet closest to the sun
+	vec3 indirect_illumination_term = calculateIndirectIllumination(wo, n, base_color) * 0.5f;
 
 	///////////////////////////////////////////////////////////////////////////
 	// Add emissive term. If emissive texture exists, sample this term.
