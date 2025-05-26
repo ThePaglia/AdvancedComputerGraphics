@@ -11,6 +11,7 @@ extern "C" _declspec(dllexport) unsigned int NvOptimusEnablement = 0x00000001;
 #include <imgui.h>
 #include <labhelper.h>
 #include <Model.h>
+#include <../project/Noise.h>
 
 #include <perf.h>
 
@@ -117,15 +118,8 @@ std::vector<vec2> planetUVs;
 std::vector<unsigned int> planetIndices;
 mat4 planetModelMatrix;
 
-
-
-float getHeightOnUnitSphere(vec3 p) 
-{
-	return 1.0f - sin(p.x * 10) * 0.1f;
-}
-
 // Modified code from https://gist.github.com/Pikachuxxxx/5c4c490a7d7679824e0e18af42918efc
-void generateSphereSmooth(int radius, int latitudes, int longitudes)
+void generatePlanet(int radius, int latitudes, int longitudes)
 {
 	if (longitudes < 3)
 		longitudes = 3;
@@ -174,7 +168,7 @@ void generateSphereSmooth(int radius, int latitudes, int longitudes)
 			dir = normalize(dir);
 
 			// The terrain height in this direction
-			float height = getHeightOnUnitSphere(dir);
+			float height = procedural::getHeightOnUnitSphere(dir);
 			
 			// The final vertex position is acquired by multiplying the dir by the height value, we effectively get a heightmap mapped onto the sphere
 			Vertex vertex;
@@ -233,7 +227,8 @@ void generateSphereSmooth(int radius, int latitudes, int longitudes)
 
 void initializePlanet()
 {
-	generateSphereSmooth(1, 100, 100);
+	// Generate a fairly high-def planet
+	generatePlanet(1, 500, 500);
 
 	///////////////////////////////////////////////////////////////////////////
 	// Create the vertex array object
