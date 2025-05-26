@@ -93,6 +93,7 @@ void main()
 {
 	float visibility = 1.0;
 
+	// TODO: Implement techniques to mitigate Projective and Perspective Aliasing: https://learn.microsoft.com/en-us/windows/win32/dxtecharts/common-techniques-to-improve-shadow-depth-maps
 	visibility = textureProj(shadowMapTex, shadowMapCoord);
 
 	vec3 wo = -normalize(viewSpacePosition);
