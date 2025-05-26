@@ -18,7 +18,6 @@ extern "C" _declspec(dllexport) unsigned int NvOptimusEnablement = 0x00000001;
 #include <glm/gtx/transform.hpp>
 using namespace glm;
 
-#include <Model.h>
 #include "hdr.h"
 #include "fbo.h"
 #include <stb_image.h>
@@ -118,7 +117,14 @@ std::vector<vec2> planetUVs;
 std::vector<unsigned int> planetIndices;
 mat4 planetModelMatrix;
 
-// Taken from https://gist.github.com/Pikachuxxxx/5c4c490a7d7679824e0e18af42918efc since this is a solved problem
+
+
+float getHeightOnUnitSphere(vec3 p) 
+{
+	return 1.0f - sin(p.x * 10) * 0.1f;
+}
+
+// Modified code from https://gist.github.com/Pikachuxxxx/5c4c490a7d7679824e0e18af42918efc
 void generateSphereSmooth(int radius, int latitudes, int longitudes)
 {
 	if (longitudes < 3)
@@ -160,10 +166,21 @@ void generateSphereSmooth(int radius, int latitudes, int longitudes)
 		{
 			longitudeAngle = j * deltaLongitude;
 
+			// dir points from the center of the sphere towards this vertex's point on the unit sphere. It is used to scale the points according to noise
+			vec3 dir;
+			dir.x = xy * cosf(longitudeAngle);       /* x = r * cos(phi) * cos(theta)  */
+			dir.y = xy * sinf(longitudeAngle);       /* y = r * cos(phi) * sin(theta) */
+			dir.z = z;                               /* z = r * sin(phi) */
+			dir = normalize(dir);
+
+			// The terrain height in this direction
+			float height = getHeightOnUnitSphere(dir);
+			
+			// The final vertex position is acquired by multiplying the dir by the height value, we effectively get a heightmap mapped onto the sphere
 			Vertex vertex;
-			vertex.x = xy * cosf(longitudeAngle);       /* x = r * cos(phi) * cos(theta)  */
-			vertex.y = xy * sinf(longitudeAngle);       /* y = r * cos(phi) * sin(theta) */
-			vertex.z = z;                               /* z = r * sin(phi) */
+			vertex.x = dir.x * height;
+			vertex.y = dir.y * height;
+			vertex.z = dir.z * height;
 			vertex.s = (float)j / longitudes;             /* s */
 			vertex.t = (float)i / latitudes;              /* t */
 			vertices.push_back(glm::vec3(vertex.x, vertex.y, vertex.z));
@@ -216,7 +233,7 @@ void generateSphereSmooth(int radius, int latitudes, int longitudes)
 
 void initializePlanet()
 {
-	generateSphereSmooth(1, 50, 50);
+	generateSphereSmooth(1, 100, 100);
 
 	///////////////////////////////////////////////////////////////////////////
 	// Create the vertex array object
