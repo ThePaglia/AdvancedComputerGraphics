@@ -25,7 +25,7 @@ using namespace glm;
 #include <iostream>
 
 // Various globals
-SDL_Window* g_window = nullptr;
+SDL_Window *g_window = nullptr;
 float currentTime = 0.0f;
 float previousTime = 0.0f;
 float deltaTime = 0.0f;
@@ -53,16 +53,16 @@ vec3 cameraUp = cross(cameraRight, cameraDirection);
 mat4 viewProjMatrix;
 
 // Model parameters
-labhelper::Model* planetModel = nullptr;
+labhelper::Model *planetModel = nullptr;
 mat4 planetModelMatrix;
-labhelper::Model* landingpadModel = nullptr; // Used for debugging the light source's depth buffer
-labhelper::Model* sphereModel = nullptr;	 // Used for debug rendering the light source
-labhelper::Model* shipModel = nullptr;
+labhelper::Model *landingpadModel = nullptr; // Used for debugging the light source's depth buffer
+labhelper::Model *sphereModel = nullptr;	 // Used for debug rendering the light source
+labhelper::Model *shipModel = nullptr;
 
 float cameraSpeed = 10;
 
 // Texture parameters
-GLuint noiseTexture;
+GLuint whiteNoiseTexture;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Light source
@@ -95,8 +95,9 @@ vec3 colorBandWavelengths = vec3(700, 530, 440);
 float atmosphereScatteringStrength = 3.0f;
 float atmosphereDensityAtSeaLevel = 0.17f;
 float pointLightIntensityMultiplier = 0.8f;
-float mieIntensity = 0.32;
-float mieG = 0.76;
+float mieIntensity = 0.32f;
+float mieG = 0.76f;
+bool beerPowderLaw = false;
 
 // Shadow map
 enum ClampMode
@@ -144,18 +145,18 @@ void loadShaders(bool is_reload)
 	}
 }
 
-void loadNoiseTexture(const std::string& filepath)
+void loadNoiseTexture(const std::string &filepath, GLuint &texture)
 {
 	int width, height, channels;
-	unsigned char* data = stbi_load(filepath.c_str(), &width, &height, &channels, 0);
+	unsigned char *data = stbi_load(filepath.c_str(), &width, &height, &channels, 0);
 	if (!data)
 	{
 		std::cerr << "Failed to load texture: " << filepath << std::endl;
 		return;
 	}
 
-	glGenTextures(1, &noiseTexture);
-	glBindTexture(GL_TEXTURE_2D, noiseTexture);
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -329,7 +330,7 @@ void initialize()
 	initializePlanet();
 
 	// Load noise texture
-	loadNoiseTexture("../textures/noise.png");
+	loadNoiseTexture("../textures/whiteNoise.png", whiteNoiseTexture);
 
 	// Shadow map
 	shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
@@ -342,22 +343,20 @@ void initialize()
 }
 
 // This function is used to draw the main objects on the scene
-void drawScene(GLuint currentShaderProgram,
-	const mat4& viewMatrix,
-	const mat4& projectionMatrix)
+void drawScene(GLuint currentShaderProgram)
 {
 	glUseProgram(currentShaderProgram);
 	glFrontFace(GL_CCW); // The drawing order is flipped for the full-screen quad used for raymarching
 
 	// Bind the noise texture
 	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, noiseTexture);
-	labhelper::setUniformSlow(currentShaderProgram, "uNoiseTexture", 2);
+	glBindTexture(GL_TEXTURE_2D, whiteNoiseTexture);
+	labhelper::setUniformSlow(currentShaderProgram, "uWhiteNoiseTexture", 2);
 
 	// Light source
 	labhelper::setUniformSlow(currentShaderProgram, "directionalLightColor", directionalLightColor);
 	labhelper::setUniformSlow(currentShaderProgram, "directionalLightIntensityMultiplier",
-		directionalLightIntensityMultiplier);
+							  directionalLightIntensityMultiplier);
 	labhelper::setUniformSlow(currentShaderProgram, "lightPosition", lightPosition);
 
 	// Simulation parameters
@@ -384,6 +383,7 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "atmosphereScatteringCoefficients", scatteringCoefficients);
 	labhelper::setUniformSlow(currentShaderProgram, "mieIntensity", mieIntensity);
 	labhelper::setUniformSlow(currentShaderProgram, "mieG", mieG);
+	labhelper::setUniformSlow(currentShaderProgram, "beerPowderLaw", beerPowderLaw);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
@@ -399,10 +399,10 @@ void drawScene(GLuint currentShaderProgram,
 }
 
 void drawSolidGeometry(GLuint currentShaderProgram,
-	const mat4& viewMatrix,
-	const mat4& projectionMatrix,
-	const mat4& lightViewMatrix,
-	const mat4& lightProjectionMatrix)
+					   const mat4 &viewMatrix,
+					   const mat4 &projectionMatrix,
+					   const mat4 &lightViewMatrix,
+					   const mat4 &lightProjectionMatrix)
 {
 	glUseProgram(currentShaderProgram);
 	if (currentShaderProgram == depthProgram)
@@ -418,10 +418,10 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	vec4 viewSpaceLightPosition = viewMatrix * vec4(lightPosition, 1.0f);
 	labhelper::setUniformSlow(currentShaderProgram, "directional_light_color", directionalLightColor);
 	labhelper::setUniformSlow(currentShaderProgram, "directional_light_intensity_multiplier",
-		directionalLightIntensityMultiplier);
+							  directionalLightIntensityMultiplier);
 	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightPosition", vec3(viewSpaceLightPosition));
 	labhelper::setUniformSlow(currentShaderProgram, "viewSpaceLightDir",
-		normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
+							  normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
 
 	// Camera
 	labhelper::setUniformSlow(currentShaderProgram, "viewInverse", inverse(viewMatrix));
@@ -445,10 +445,10 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 
 	// Planet
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
-		projectionMatrix * viewMatrix * planetModelMatrix);
+							  projectionMatrix * viewMatrix * planetModelMatrix);
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * planetModelMatrix);
 	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
-		inverse(transpose(viewMatrix * planetModelMatrix)));
+							  inverse(transpose(viewMatrix * planetModelMatrix)));
 
 	
 	labhelper::setUniformSlow(currentShaderProgram, "material_color", vec3(0.1f, 1.0f, 0.3f));
@@ -463,10 +463,10 @@ void drawSolidGeometry(GLuint currentShaderProgram,
 	float d = 16 + sin(cloudTime * 2) * 0.25f;
 	mat4 shipMatrix = rotate(radians(25.0f), vec3(0, 0, 1)) * translate(vec3(0, d, 0)) * scale(vec3(0.05f));
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix",
-		projectionMatrix * viewMatrix * shipMatrix);
+							  projectionMatrix * viewMatrix * shipMatrix);
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * shipMatrix);
 	labhelper::setUniformSlow(currentShaderProgram, "normalMatrix",
-		inverse(transpose(viewMatrix * shipMatrix)));
+							  inverse(transpose(viewMatrix * shipMatrix)));
 
 	labhelper::render(shipModel);
 }
@@ -509,7 +509,7 @@ void display(void)
 	// Set Up Shadow Map
 	///////////////////////////////////////////////////////////////////////////
 	{
-		labhelper::perf::Scope s("Shadow Map");
+		labhelper::perf::Scope shadowMapScope("Shadow Map");
 
 		if (shadowMapFB.width != shadowMapResolution || shadowMapFB.height != shadowMapResolution)
 		{
@@ -563,7 +563,7 @@ void display(void)
 	// screen.m_emission_texture.gl_id = shadowMapFB.colorTextureTargets[0];
 
 	{
-		labhelper::perf::Scope s("Rasterized Graphics");
+		labhelper::perf::Scope rasterizationScope("Rasterized Graphics");
 
 		// Draw to fbo from camera
 		glBindFramebuffer(GL_FRAMEBUFFER, rasterizedFBO.framebufferId);
@@ -574,7 +574,7 @@ void display(void)
 		drawSolidGeometry(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
 	}
 	{
-		labhelper::perf::Scope s("Ray Marching");
+		labhelper::perf::Scope rayMarchingScope("Ray Marching");
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -588,9 +588,8 @@ void display(void)
 		glBindTexture(GL_TEXTURE_2D, rasterizedFBO.depthBuffer);
 		glUniform1i(glGetUniformLocation(raymarchingProgram, "uSceneDepth"), 1);
 
-		drawScene(raymarchingProgram, viewMatrix, projMatrix);
+		drawScene(raymarchingProgram);
 	}
-
 }
 
 // This function is used to update the scene according to user input
@@ -652,7 +651,7 @@ bool handleEvents(void)
 	}
 
 	// check keyboard state (which keys are still pressed)
-	const uint8_t* state = SDL_GetKeyboardState(nullptr);
+	const uint8_t *state = SDL_GetKeyboardState(nullptr);
 
 	if (state[SDL_SCANCODE_W])
 	{
@@ -696,7 +695,7 @@ void gui()
 {
 	// ----------------- Set variables --------------------------
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
-		ImGui::GetIO().Framerate);
+				ImGui::GetIO().Framerate);
 	// ----------------------------------------------------------
 	ImGui::Text("Settings");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
@@ -713,23 +712,24 @@ void gui()
 	ImGui::SliderFloat("Cloud Step Max", &cloudStepMax, 0, 1);
 	ImGui::SliderFloat("Cloud Shadow Cutoff", &cloudShadowCutoff, 0, 1);
 	ImGui::SliderFloat("Cloud Shadow Intensity", &cloudShadowIntensity, 0, 10);
-	ImGui::SliderFloat("Cloud Lighting Fraction", &cloudLightingFalloff, 0.001, 1);
+	ImGui::SliderFloat("Cloud Lighting Fraction", &cloudLightingFalloff, 0.001f, 1.0f);
 	ImGui::SliderFloat("Cloud Noise UV Scale", &cloudNoiseUVScale, 1, 2048);
 	ImGui::SliderFloat("Cloud Noise Amount", &cloudNoiseAmount, 0, 1);
-	ImGui::SliderFloat("Sunset Cloud Width", &sunsetCloudWidth, 0.001, 1);
+	ImGui::SliderFloat("Sunset Cloud Width", &sunsetCloudWidth, 0.001f, 1.0f);
 	ImGui::SliderFloat("Mie Scattering Intensity", &mieIntensity, 0.0, 1.0);
-	ImGui::SliderFloat("Mie Scattering G", &mieG, 0.0, 0.999);
+	ImGui::SliderFloat("Mie Scattering G", &mieG, 0.0f, 0.999f);
+	ImGui::Checkbox("Beer-Powder Law", &beerPowderLaw);
 	ImGui::Text("Atmosphere");
 	ImGui::SliderFloat("Atmosphere Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Density Falloff", &atmosphereDensityFalloff, 0, 10);
 	ImGui::SliderFloat("Density at Sea Level", &atmosphereDensityAtSeaLevel, 0, 1);
-	ImGui::SliderFloat3("Scattering Wavelengths", (float*)&colorBandWavelengths, 0, 1000);
+	ImGui::SliderFloat3("Scattering Wavelengths", (float *)&colorBandWavelengths, 0, 1000);
 	ImGui::SliderFloat("Scattering Strength", &atmosphereScatteringStrength, 0, 10);
 
 	ImGui::Text("Sun");
 	ImGui::SliderFloat("Sun Intensity", &directionalLightIntensityMultiplier, 0, 2);
 	ImGui::Checkbox("Animate light", &animateLight);
-	ImGui::SliderFloat3("Sun Position", (float*)&lightPosition, -100, 100);
+	ImGui::SliderFloat3("Sun Position", (float *)&lightPosition, -100, 100);
 	ImGui::SliderInt("Shadow Map Resolution", &shadowMapResolution, 32, 4096);
 	ImGui::Checkbox("Use polygon offset", &usePolygonOffset);
 	ImGui::SliderFloat("Factor", &polygonOffset_factor, 0.0f, 10.0f);
@@ -739,7 +739,7 @@ void gui()
 	labhelper::perf::drawEventsWindow();
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
 	g_window = labhelper::init_window_SDL("OpenGL Project");
 

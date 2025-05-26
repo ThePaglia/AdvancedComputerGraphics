@@ -7,7 +7,7 @@ uniform float uTime;
 uniform vec2 uResolution;
 uniform sampler2D uSceneColor; // Result from rasterization step
 uniform sampler2D uSceneDepth; // Result from rasterization step
-uniform sampler2D uNoiseTexture;
+uniform sampler2D uWhiteNoiseTexture;
 
 // These are values retrieved from the previous rasterized step
 vec3 sceneColor;
@@ -58,7 +58,7 @@ uniform float atmosphereDepth = 3.0;
 uniform float cloudStepMin = 0.1;
 uniform float cloudStepMax = 0.8;
 uniform float cloudLightingFalloff = 0.5;
-uniform float sunsetCloudWidth = 0.2f;
+uniform float sunsetCloudWidth = 0.2;
 uniform float atmosphereDensityFalloff = 2.0;
 uniform vec3 atmosphereScatteringCoefficients = vec3(0.0, 0.0, 0.0);
 uniform float atmosphereDensityAtSeaLevel = 0.5;
@@ -72,6 +72,7 @@ vec3 sunDirection = normalize(lightPosition);
 // Try values between 0.75 and 0.99
 uniform float mieG;
 uniform float mieIntensity;
+uniform bool beerPowderLaw;
 
 float sdSphere(vec3 p, float radius) {
     return length(p) - radius;
@@ -83,7 +84,7 @@ float noise(vec3 x) {
     f = f * f * (3.0 - 2.0 * f);
 
     vec2 uv = (p.xy + vec2(37.0, 239.0) * p.z) + f.xy;
-    vec2 tex = textureLod(uNoiseTexture, (uv + 0.5) / textureSize(uNoiseTexture, 0), 0.0).yx;
+    vec2 tex = textureLod(uWhiteNoiseTexture, (uv + 0.5) / textureSize(uWhiteNoiseTexture, 0), 0.0).yx;
     return mix(tex.x, tex.y, f.z) * 2.0 - 1.0;
 }
 
@@ -283,8 +284,8 @@ vec4 calculateAtmosphereLight(vec3 rayOrigin, vec3 rayDirection, float rayLength
 
 // Heneye Greenstein phase function for MIE scattering
 float HenyeyGreenstein(float g, float cosTheta) {
-    float gg = g*g;
-    return (1.0 / (4.0 * PI))  * ((1.0 - gg) / pow(1.0 + gg - 2.0 * g * cosTheta, 1.5));
+    float gg = g * g;
+    return (1.0 / (4.0 * PI)) * ((1.0 - gg) / pow(1.0 + gg - 2.0 * g * cosTheta, 1.5));
 }
 
 vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offset) {
@@ -406,7 +407,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 vec3 sunsetColor = vec3(1.0, 0.5, 0.2);
                 // Interpolate between sunset and overhead color based on angle
                 vec3 sunColor = mix(sunsetColor, directionalLightColor, sunViewFactor);
-                
+
                 // Mie Scattering
                 float mieCosTheta = dot(rayDirection, sunDirection);
                 float miePhase = HenyeyGreenstein(mieG, mieCosTheta);
@@ -420,7 +421,12 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
                 color.rgb *= lin * shadowMultiplier;
                 color.rgb *= color.a;
-                color *= exp(-viewRayOpticalDepth); // Not sure if this is the best way of multiplying the contribution of the viewRayOpticalDepth as it affects the transparency
+                // TODO: Let me know if it looks better to you
+                if(beerPowderLaw) {
+                    color *= exp(-viewRayOpticalDepth * (1.0 - exp(-viewRayOpticalDepth * 2.0))); // Not sure if this is the best way of multiplying the contribution of the viewRayOpticalDepth as it affects the transparency
+                } else {
+                    color *= exp(-viewRayOpticalDepth);
+                }
                 volumetricRes += color * (1.0 - volumetricRes.a);
 
                 // We can immediately break out of the loop if the transparency is greater than this treshold, the reasoning is that any further steps would contribute an insignificant amount to the pixel color
@@ -488,7 +494,7 @@ void main() {
 
     // 6. Raymarching
     vec3 color = vec3(0.0);
-    float blueNoise = texture2D(uNoiseTexture, gl_FragCoord.xy / cloudNoiseUVScale).r;
+    float blueNoise = texture2D(uWhiteNoiseTexture, gl_FragCoord.xy / cloudNoiseUVScale).r;
     float offset = fract(blueNoise);
     vec4 res = raymarch(rayOrigin, rayDirection, uCameraDir, offset);
     color = res.rgb;
