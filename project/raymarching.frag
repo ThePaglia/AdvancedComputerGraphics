@@ -296,10 +296,10 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     float rayDotCloudPlane = dot(rayDirection, normalize(rayDirection * vec3(1, 0, 1)));
     float distCamCloudPlane = abs(rayOrigin.y - cloudHeight);
 
-    vec4 opaqueRes = vec4(sceneColor, 1);
     // Calculate the pixel contribution of opaque geometry
+    vec4 opaqueRes = vec4(sceneColor, 1);
     vec3 opaquePoint = vec3(scenePoint);
-    float opaqueDepth = length(rayOrigin - opaquePoint);
+    float opaqueDepth = sceneDepth; // NOTE: the opaqueDepth retrieved from the scene texture creates quite a lot of precision errors as you move further away from the planet
 
     float tEnterWater, tExitWater;
     float waterRadius = 13f;
