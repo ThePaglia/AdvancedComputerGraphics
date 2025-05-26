@@ -228,7 +228,7 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 void initializePlanet()
 {
 	// Generate a fairly high-def planet
-	generatePlanet(1, 500, 500);
+	generatePlanet(1, 600, 600);
 
 	///////////////////////////////////////////////////////////////////////////
 	// Create the vertex array object
