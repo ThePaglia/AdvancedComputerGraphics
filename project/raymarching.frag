@@ -72,6 +72,7 @@ uniform float waterDepthMultiplier = 1f;
 uniform float waterAlphaMultiplier = 3f;
 uniform vec3 waterColorShallow = vec3(0.553, 0.949, 1);
 uniform vec3 waterColorDeep = vec3(0.012, 0.012, 0.2);
+uniform float waterSmoothness = 0.8f;
 
 // Precalculated constants
 const float atmosphereRadius = planetRadius + atmosphereDepth;
@@ -313,30 +314,36 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, waterRadius, tEnterWater, tExitWater) && tExitWater > 0) {
         // Check if this pixel should be affected by water
         if(tEnterWater < opaqueDepth) {
+            // Retrieve the scene depth and corresponding world space point for this fragment while in water
+            float waterDepth = min(tEnterWater < 0 ? tExitWater : tEnterWater, opaqueDepth);
+            vec3 waterPoint = rayOrigin + rayDirection * waterDepth;
+
             // This is the length that the ray travels through the water
             float waterViewDepth = tEnterWater > 0 ? opaqueDepth - max(tEnterWater, 0) : tExitWater;
             float normalizedOpticalDepth = 1 - exp(-waterViewDepth * waterDepthMultiplier);
             float alpha = 1 - exp(-waterViewDepth * waterAlphaMultiplier);
-            // NOTE: This method for calculating the water color works... okay if you are above the water line
-            vec3 waterColor = mix(waterColorShallow, waterColorDeep, normalizedOpticalDepth);
-
-            // Update the opaque point and depth so that cloud shadow calculations are done from the correct point
-            float opaqueT = min(tEnterWater < 0 ? tExitWater : tEnterWater, opaqueDepth);
-            opaquePoint = rayOrigin + rayDirection * opaqueT;
-            opaqueDepth = opaqueT;
-            
 	        vec3 planetNormal = normalize(opaquePoint - planetOrigin);
-
-	        // The indirect light contribution is calculated in the same way as in the rasterized fragment shader
+            float specularAngle = acos(dot(normalize(sunDirection - rayDirection), planetNormal));
+            float specularExponent = specularAngle / (1 - waterSmoothness);
+            float specularHighlight = exp(-specularExponent * specularExponent);
+            // The indirect light contribution is calculated in the same way as in the rasterized fragment shader
 	        float indirectLight = max(dot(planetNormal, sunDirection), 0);
-            
-            vec4 shadowMapCoord = lightMatrix * viewMatrix * vec4(opaquePoint, 1.0f);
+
+            vec4 shadowMapCoord = lightMatrix * viewMatrix * vec4(waterPoint, 1.0f);
             float visibility = textureProj(shadowMapTex, shadowMapCoord);
 
-            waterColor *= visibility + indirectLight * 0.5f;
+            // NOTE: This method for calculating water color does not work great when underwater
+            vec3 waterColor = mix(waterColorShallow, waterColorDeep, normalizedOpticalDepth) * indirectLight + vec3(specularHighlight) * visibility; 
 
+            // Blend between the water color and the original color
             opaqueRes.rgb = mix(opaqueRes.rgb, waterColor, alpha);
 
+            // Update the opaque point and depth so that cloud shadow calculations are done from the correct point
+            opaquePoint = waterPoint;
+            opaqueDepth = waterDepth;
+            
+            // If we are in the water we can skip doing atmosphere traversal and cloud computation
+            // NOTE: that this breaks down the visuals if you are looking up while just below the surface
             isInWater = tEnterWater < 0;
         }
     }
