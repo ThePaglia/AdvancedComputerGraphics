@@ -44,6 +44,7 @@ uniform vec3 viewSpaceLightPosition;
 uniform vec3 planetOrigin = vec3(0, 0, 0);
 uniform float waterRadius;
 uniform float foamWidth = 0.05f;
+uniform float simulationTime = 1.0;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Output color
@@ -99,7 +100,7 @@ void main() {
 	vec3 wo = -normalize(viewSpacePosition);
 	vec3 n = normalize(viewSpaceNormal);
 
-	float distanceToWater = length(vec3(viewInverse * vec4(viewSpacePosition, 1.0f)) - planetOrigin) - waterRadius;
+	float distanceToWater = length(vec3(viewInverse * vec4(viewSpacePosition, 1.0f)) - planetOrigin) - (waterRadius + sin(simulationTime * 10) * foamWidth * 0.5f);
 	// The base color is set to white if it is close enough to the shoreline. This creates a quick and hacky version of a foamy shoreline but is not correct as it is displayed on the geometry itself
 	vec3 base_color = abs(distanceToWater) < foamWidth ? vec3(1) : vertexColor;
 

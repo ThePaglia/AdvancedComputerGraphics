@@ -473,6 +473,8 @@ void drawScene(GLuint currentShaderProgram,
 	// Scene parameters
 	labhelper::setUniformSlow(currentShaderProgram, "waterRadius", waterRadius);
 	labhelper::setUniformSlow(currentShaderProgram, "foamWidth", waterFoamWidth);
+	labhelper::setUniformSlow(currentShaderProgram, "simulationTime", cloudTime);
+
 
 	// Light matrix and depth buffer texture
 	glActiveTexture(GL_TEXTURE10);
