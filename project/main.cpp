@@ -103,6 +103,7 @@ float waterDepthMultiplier = 1.0f;
 float waterAlphaMultiplier = 3.0f;
 float waterSmoothness = 0.9f;
 float waterNoiseScale = 20;
+float waterFoamWidth = 0.02f;
 vec3 waterColorShallow = vec3(0.553, 0.949, 1);
 vec3 waterColorDeep = vec3(0.012, 0.012, 0.2);
 
@@ -469,6 +470,10 @@ void drawScene(GLuint currentShaderProgram,
 	// Camera
 	labhelper::setUniformSlow(currentShaderProgram, "viewInverse", inverse(viewMatrix));
 
+	// Scene parameters
+	labhelper::setUniformSlow(currentShaderProgram, "waterRadius", waterRadius);
+	labhelper::setUniformSlow(currentShaderProgram, "foamWidth", waterFoamWidth);
+
 	// Light matrix and depth buffer texture
 	glActiveTexture(GL_TEXTURE10);
 	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
@@ -738,12 +743,13 @@ void gui()
 	// ----------------------------------------------------------
 	ImGui::Text("Planet Settings");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
-	ImGui::SliderFloat("Planet Radius", &planetRadius, 1, 100.0f);
-	ImGui::SliderFloat("Water Radius", &waterRadius, 1, 100.0f);
+	ImGui::SliderFloat("Planet Radius", &planetRadius, 1, 50.0f);
+	ImGui::SliderFloat("Water Radius", &waterRadius, 1, 50.0f);
 	ImGui::SliderFloat("Water Smoothness", &waterSmoothness, 0, 0.999f);
 	ImGui::SliderFloat("Water Noise Scale", &waterNoiseScale, 0, 100);
 	ImGui::SliderFloat("Water Depth Multiplier", &waterDepthMultiplier, 0, 10);
 	ImGui::SliderFloat("Water Alpha Multiplier", &waterAlphaMultiplier, 0, 10);
+	ImGui::SliderFloat("Water Foam Width", &waterFoamWidth, 0, 1);
 	ImGui::ColorEdit3("Shallow Color", (float*)& waterColorShallow);
 	ImGui::ColorEdit3("Deep Color", (float*)&waterColorDeep);
 
