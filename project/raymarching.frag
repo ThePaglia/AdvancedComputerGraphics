@@ -73,6 +73,7 @@ uniform float waterAlphaMultiplier = 3.0;
 uniform vec3 waterColorShallow = vec3(0.553, 0.949, 1);
 uniform vec3 waterColorDeep = vec3(0.012, 0.012, 0.2);
 uniform float waterSmoothness = 0.8f;
+uniform float waterNoiseScale = 20f;
 
 // Precalculated constants
 const float atmosphereRadius = planetRadius + atmosphereDepth;
@@ -322,7 +323,9 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             float waterViewDepth = tEnterWater > 0 ? opaqueDepth - max(tEnterWater, 0) : tExitWater;
             float normalizedOpticalDepth = 1 - exp(-waterViewDepth * waterDepthMultiplier);
             float alpha = 1 - exp(-waterViewDepth * waterAlphaMultiplier);
-	        vec3 planetNormal = normalize(opaquePoint - planetOrigin);
+            float normalNoise = noise((waterPoint + vec3(1, 0, 0) * cloudTime) * waterNoiseScale);
+                 normalNoise += noise((waterPoint + vec3(0, 1, 0) * cloudTime) * waterNoiseScale * 2);
+	        vec3 planetNormal = normalize(waterPoint + normalNoise) - planetOrigin;
             float specularAngle = acos(dot(normalize(sunDirection - rayDirection), planetNormal));
             float specularExponent = specularAngle / (1 - waterSmoothness);
             float specularHighlight = exp(-specularExponent * specularExponent);
@@ -341,7 +344,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             // Update the opaque point and depth so that cloud shadow calculations are done from the correct point
             opaquePoint = waterPoint;
             opaqueDepth = waterDepth;
-            
+
             // If we are in the water we can skip doing atmosphere traversal and cloud computation
             // NOTE: that this breaks down the visuals if you are looking up while just below the surface
             isInWater = tEnterWater < 0;
