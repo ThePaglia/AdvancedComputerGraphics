@@ -25,7 +25,7 @@ using namespace glm;
 #include <iostream>
 
 // Various globals
-SDL_Window *g_window = nullptr;
+SDL_Window* g_window = nullptr;
 float currentTime = 0.0f;
 float previousTime = 0.0f;
 float deltaTime = 0.0f;
@@ -38,9 +38,9 @@ bool g_doMouseLookaround = false;
 // Shader programs
 ///////////////////////////////////////////////////////////////////////////////
 GLuint raymarchingProgram; // Shader for rendering all ray marched effects (clouds, cloud shadows & atmosphere)
-GLuint shaderProgram; // Shader for rendering the final image
-GLuint depthProgram;  // Shader used to draw the shadow map
-GLuint simpleProgram; // Shader used for testing
+GLuint shaderProgram;	   // Shader for rendering the final image
+GLuint depthProgram;	   // Shader used to draw the shadow map
+GLuint simpleProgram;	   // Shader used for testing
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
@@ -51,9 +51,9 @@ vec3 cameraUp = cross(cameraRight, cameraDirection);
 mat4 viewProjMatrix;
 
 // Model parameters
-labhelper::Model *landingpadModel = nullptr; // Used for debugging the light source's depth buffer
-labhelper::Model *sphereModel = nullptr;	 // Used for debug rendering the light source
-labhelper::Model *shipModel = nullptr;
+labhelper::Model* landingpadModel = nullptr; // Used for debugging the light source's depth buffer
+labhelper::Model* sphereModel = nullptr;	 // Used for debug rendering the light source
+labhelper::Model* shipModel = nullptr;
 
 float cameraSpeed = 10;
 
@@ -119,9 +119,10 @@ GLuint colorTex;
 GLuint depthTex;
 
 // Planet buffers etc.
-GLuint planetPositionBuffer, planetIndexBuffer, planetNormalBuffer, planetVAO;
+GLuint planetPositionBuffer, planetIndexBuffer, planetNormalBuffer, planetColorBuffer, planetVAO;
 std::vector<vec3> planetVertices;
 std::vector<vec3> planetNormals;
+std::vector<vec3> planetColors;
 std::vector<vec2> planetUVs;
 std::vector<unsigned int> planetIndices;
 mat4 planetModelMatrix;
@@ -138,8 +139,9 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 	std::vector<vec3> normals;
 	std::vector<vec2> uv;
 	std::vector<unsigned int> indices;
+	std::vector<vec3> colors;
 
-	float nx, ny, nz, lengthInv = 1.0f / radius;    // normal
+	float nx, ny, nz, lengthInv = 1.0f / radius; // normal
 	// Temporary vertex
 	struct Vertex
 	{
@@ -155,8 +157,8 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 	for (int i = 0; i <= latitudes; ++i)
 	{
 		latitudeAngle = M_PI / 2 - i * deltaLatitude; /* Starting -pi/2 to pi/2 */
-		float xy = radius * cosf(latitudeAngle);    /* r * cos(phi) */
-		float z = radius * sinf(latitudeAngle);     /* r * sin(phi )*/
+		float xy = radius * cosf(latitudeAngle);	  /* r * cos(phi) */
+		float z = radius * sinf(latitudeAngle);		  /* r * sin(phi )*/
 
 		/*
 		 * We add (latitudes + 1) vertices per longitude because of equator,
@@ -170,21 +172,22 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 
 			// dir points from the center of the sphere towards this vertex's point on the unit sphere. It is used to scale the points according to noise
 			vec3 dir;
-			dir.x = xy * cosf(longitudeAngle);       /* x = r * cos(phi) * cos(theta)  */
-			dir.y = xy * sinf(longitudeAngle);       /* y = r * cos(phi) * sin(theta) */
-			dir.z = z;                               /* z = r * sin(phi) */
+			dir.x = xy * cosf(longitudeAngle); /* x = r * cos(phi) * cos(theta)  */
+			dir.y = xy * sinf(longitudeAngle); /* y = r * cos(phi) * sin(theta) */
+			dir.z = z;						   /* z = r * sin(phi) */
 			dir = normalize(dir);
 
 			// The terrain height in this direction
 			float height = procedural::getHeightOnUnitSphere(dir);
-			
+			vec3 color = procedural::getColorForHeight(height);
+
 			// The final vertex position is acquired by multiplying the dir by the height value, we effectively get a heightmap mapped onto the sphere
 			Vertex vertex;
 			vertex.x = dir.x * height;
 			vertex.y = dir.y * height;
 			vertex.z = dir.z * height;
-			vertex.s = (float)j / longitudes;             /* s */
-			vertex.t = (float)i / latitudes;              /* t */
+			vertex.s = (float)j / longitudes; /* s */
+			vertex.t = (float)i / latitudes;  /* t */
 			vertices.push_back(glm::vec3(vertex.x, vertex.y, vertex.z));
 			uv.push_back(glm::vec2(vertex.s, vertex.t));
 
@@ -193,6 +196,9 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 			ny = vertex.y * lengthInv;
 			nz = vertex.z * lengthInv;
 			normals.push_back(glm::vec3(nx, ny, nz));
+
+			// Color for this vertex
+			colors.push_back(color);
 		}
 	}
 
@@ -231,6 +237,7 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 	planetNormals = normals;
 	planetUVs = uv;
 	planetIndices = indices;
+	planetColors = colors;
 }
 
 void initializePlanet()
@@ -266,6 +273,13 @@ void initializePlanet()
 	// Enable the attribute
 	glEnableVertexAttribArray(1);
 
+	// Create a handle for the color buffer
+	glGenBuffers(1, &planetColorBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, planetColorBuffer);
+	glBufferData(GL_ARRAY_BUFFER, planetColors.size() * sizeof(vec3), planetColors.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(3, 3, GL_FLOAT, false, 0, 0);
+	glEnableVertexAttribArray(3);
+
 	// Finally, set the planet's indices
 	glGenBuffers(1, &planetIndexBuffer);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planetIndexBuffer);
@@ -273,7 +287,8 @@ void initializePlanet()
 		GL_STATIC_DRAW);
 }
 
-void loadModels() {
+void loadModels()
+{
 	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
 	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
 	shipModel = labhelper::loadModelFromOBJ("../scenes/NewShip.obj");
@@ -328,7 +343,6 @@ void loadNoiseTexture(const std::string& filepath, GLuint& texture)
 	stbi_image_free(data);
 }
 
-
 // This function is called once at the start of the program and never again
 void initialize()
 {
@@ -370,7 +384,7 @@ void drawFullscreenQuad(GLuint currentShaderProgram, mat4 viewMatrix, mat4 light
 	// Light source
 	labhelper::setUniformSlow(currentShaderProgram, "directionalLightColor", directionalLightColor);
 	labhelper::setUniformSlow(currentShaderProgram, "directionalLightIntensityMultiplier",
-							  directionalLightIntensityMultiplier);
+		directionalLightIntensityMultiplier);
 	labhelper::setUniformSlow(currentShaderProgram, "lightPosition", lightPosition);
 
 	// Simulation parameters
@@ -428,10 +442,10 @@ void drawFullscreenQuad(GLuint currentShaderProgram, mat4 viewMatrix, mat4 light
 }
 
 void drawScene(GLuint currentShaderProgram,
-					   const mat4 &viewMatrix,
-					   const mat4 &projectionMatrix,
-					   const mat4 &lightViewMatrix,
-					   const mat4 &lightProjectionMatrix)
+	const mat4& viewMatrix,
+	const mat4& projectionMatrix,
+	const mat4& lightViewMatrix,
+	const mat4& lightProjectionMatrix)
 {
 	glUseProgram(currentShaderProgram);
 	if (currentShaderProgram == depthProgram)
@@ -469,7 +483,6 @@ void drawScene(GLuint currentShaderProgram,
 		inverse(transpose(viewMatrix * modelMatrix)));
 	labhelper::render(landingpadModel);
 	*/
-
 
 	// Planet
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix", projectionMatrix * viewMatrix * planetModelMatrix);
@@ -595,7 +608,7 @@ void display(void)
 	}
 
 	///////////////////////////////////////////////////////////////////////////
-	// Set Up and draw post process Ray Marching 
+	// Set Up and draw post process Ray Marching
 	///////////////////////////////////////////////////////////////////////////
 	{
 		labhelper::perf::Scope rayMarchingScope("Ray Marching");
@@ -675,7 +688,7 @@ bool handleEvents(void)
 	}
 
 	// check keyboard state (which keys are still pressed)
-	const uint8_t *state = SDL_GetKeyboardState(nullptr);
+	const uint8_t* state = SDL_GetKeyboardState(nullptr);
 
 	if (state[SDL_SCANCODE_W])
 	{
@@ -719,7 +732,7 @@ void gui()
 {
 	// ----------------- Set variables --------------------------
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
-				ImGui::GetIO().Framerate);
+		ImGui::GetIO().Framerate);
 	// ----------------------------------------------------------
 	ImGui::Text("Planet Settings");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
@@ -753,13 +766,13 @@ void gui()
 	ImGui::SliderFloat("Atmosphere Depth", &atmosphereDepth, 0, 10);
 	ImGui::SliderFloat("Density Falloff", &atmosphereDensityFalloff, 0, 10);
 	ImGui::SliderFloat("Density at Sea Level", &atmosphereDensityAtSeaLevel, 0, 1);
-	ImGui::SliderFloat3("Scattering Wavelengths", (float *)&colorBandWavelengths, 0, 1000);
+	ImGui::SliderFloat3("Scattering Wavelengths", (float*)&colorBandWavelengths, 0, 1000);
 	ImGui::SliderFloat("Scattering Strength", &atmosphereScatteringStrength, 0, 10);
 
 	ImGui::Text("Sun");
 	ImGui::SliderFloat("Sun Intensity", &directionalLightIntensityMultiplier, 0, 2);
 	ImGui::Checkbox("Animate light", &animateLight);
-	ImGui::SliderFloat3("Sun Position", (float *)&lightPosition, -100, 100);
+	ImGui::SliderFloat3("Sun Position", (float*)&lightPosition, -100, 100);
 	ImGui::SliderInt("Shadow Map Resolution", &shadowMapResolution, 32, 4096);
 	ImGui::Checkbox("Use polygon offset", &usePolygonOffset);
 	ImGui::SliderFloat("Factor", &polygonOffset_factor, 0.0f, 10.0f);
@@ -769,7 +782,7 @@ void gui()
 	labhelper::perf::drawEventsWindow();
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
 	g_window = labhelper::init_window_SDL("OpenGL Project");
 

@@ -48,14 +48,14 @@ uniform vec3 planetOrigin = vec3(0, 0, 0);
 ///////////////////////////////////////////////////////////////////////////////
 layout(location = 0) out vec4 fragmentColor;
 
+in vec3 vertexColor;
+
 // Shadows
 in vec4 shadowMapCoord;
 layout(binding = 10) uniform sampler2DShadow shadowMapTex;
 uniform vec3 viewSpaceLightDir;
 
-
-vec3 calculateDirectIllumiunation(vec3 wo, vec3 n, vec3 base_color)
-{
+vec3 calculateDirectIllumiunation(vec3 wo, vec3 n, vec3 base_color) {
 	vec3 direct_illum = base_color;
 
 	// Directional light term (the sun), distance is not relevant here
@@ -63,7 +63,7 @@ vec3 calculateDirectIllumiunation(vec3 wo, vec3 n, vec3 base_color)
 	vec3 wi = normalize(viewSpaceLightPosition - viewSpacePosition);
 	if(dot(wi, n) <= 0.0)
 		return vec3(0.0);
-	
+
 	vec3 diffuse_term = base_color * (1.0 / PI) * dot(n, wi) * Li;
 	direct_illum = diffuse_term;
 
@@ -73,8 +73,7 @@ vec3 calculateDirectIllumiunation(vec3 wo, vec3 n, vec3 base_color)
 
 // Approximates calculates incoming indirect illumination from the atmosphere, assuming (incorrectly) that that light is completely white
 // This assumption is needed to achieve realtime performance, we would have to calculate incoming atmospheric radiance both here and in the raymarching shader otherwise
-vec3 calculateIndirectIllumination(vec3 wo, vec3 n, vec3 base_color)
-{
+vec3 calculateIndirectIllumination(vec3 wo, vec3 n, vec3 base_color) {
 	// The idea here is to create a vector from the planet's origin towards the fragment and compare that vector to the sun direction
 	// This can be done in world space, but to save precious computation, we do it in view space instead (as we have those variables already)
 	// The planet's origin in view space. Since we get the other ones in view space, this is the only one we need to transform!
@@ -89,8 +88,7 @@ vec3 calculateIndirectIllumination(vec3 wo, vec3 n, vec3 base_color)
 	return base_color * diffuse;
 }
 
-void main()
-{
+void main() {
 	float visibility = 1.0;
 
 	// TODO: Implement techniques to mitigate Projective and Perspective Aliasing: https://learn.microsoft.com/en-us/windows/win32/dxtecharts/common-techniques-to-improve-shadow-depth-maps
@@ -99,9 +97,8 @@ void main()
 	vec3 wo = -normalize(viewSpacePosition);
 	vec3 n = normalize(viewSpaceNormal);
 
-	vec3 base_color = material_color;
-	if(has_color_texture == 1)
-	{
+	vec3 base_color = vertexColor;
+	if(has_color_texture == 1) {
 		base_color = texture(colorMap, texCoord).rgb;
 	}
 
@@ -111,14 +108,13 @@ void main()
 	// Indirect illumination
 	// TODO: Figure out correct way of scaling the indirect illumination, currently we just halve it to make the issue less noticeable
 	//		If we don't halve it, cloud shadows disappear when viewing them from very close on the point of the planet closest to the sun
-	vec3 indirect_illumination_term = calculateIndirectIllumination(wo, n, base_color) * 0.5f;
+	vec3 indirect_illumination_term = calculateIndirectIllumination(wo, n, base_color) * 0.5;
 
 	///////////////////////////////////////////////////////////////////////////
 	// Add emissive term. If emissive texture exists, sample this term.
 	///////////////////////////////////////////////////////////////////////////
 	vec3 emission_term = material_emission;
-	if(has_emission_texture == 1)
-	{
+	if(has_emission_texture == 1) {
 		emission_term = texture(emissiveMap, texCoord).rgb;
 	}
 

@@ -67,9 +67,9 @@ uniform vec3 atmosphereScatteringCoefficients = vec3(0.0, 0.0, 0.0);
 uniform float atmosphereDensityAtSeaLevel = 0.5;
 
 // Water parameters
-uniform float waterRadius = 13f;
-uniform float waterDepthMultiplier = 1f;
-uniform float waterAlphaMultiplier = 3f;
+uniform float waterRadius = 13.0;
+uniform float waterDepthMultiplier = 1.0;
+uniform float waterAlphaMultiplier = 3.0;
 uniform vec3 waterColorShallow = vec3(0.553, 0.949, 1);
 uniform vec3 waterColorDeep = vec3(0.012, 0.012, 0.2);
 uniform float waterSmoothness = 0.8f;
@@ -310,6 +310,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     float opaqueDepth = sceneDepth; // NOTE: the opaqueDepth retrieved from the scene texture creates quite a lot of precision errors as you move further away from the planet
 
     float tEnterWater, tExitWater;
+    float waterRadius = 13.0f;
     bool isInWater = false;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, waterRadius, tEnterWater, tExitWater) && tExitWater > 0) {
         // Check if this pixel should be affected by water
