@@ -328,7 +328,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 	        vec3 planetNormal = normalize(waterPoint + normalNoise) - planetOrigin;
             float specularAngle = acos(dot(normalize(sunDirection - rayDirection), planetNormal));
             float specularExponent = specularAngle / (1 - waterSmoothness);
-            float specularHighlight = exp(-specularExponent * specularExponent);
+            vec3 specularHighlight = exp(-specularExponent * specularExponent) * directionalLightColor;
             // The indirect light contribution is calculated in the same way as in the rasterized fragment shader
 	        float indirectLight = max(dot(planetNormal, sunDirection), 0);
 
@@ -336,7 +336,10 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             float visibility = textureProj(shadowMapTex, shadowMapCoord);
 
             // NOTE: This method for calculating water color does not work great when underwater
-            vec3 waterColor = mix(waterColorShallow, waterColorDeep, normalizedOpticalDepth) * indirectLight + vec3(specularHighlight) * visibility; 
+            vec3 diffuseColor = mix(waterColorShallow, waterColorDeep, normalizedOpticalDepth) * indirectLight;
+            // Scale diffuse color in the range of 0.5 - 1 depending on visibility, this ensures that we always get at least 50% of the diffuse contribution
+            // Highlight color is scaled by visiblity as no higlight color should contribute to the pixel if it is in shadow
+            vec3 waterColor = diffuseColor * max(visibility, 0.5f) + specularHighlight * visibility; 
 
             // Blend between the water color and the original color
             opaqueRes.rgb = mix(opaqueRes.rgb, waterColor, alpha);
