@@ -74,6 +74,9 @@ uniform vec3 waterColorShallow = vec3(0.553, 0.949, 1);
 uniform vec3 waterColorDeep = vec3(0.012, 0.012, 0.2);
 uniform float waterSmoothness = 0.8f;
 uniform float waterNoiseScale = 20f;
+uniform float maxReflectionSteps = 100;
+uniform float reflectionMarchSize = 0.2f;
+uniform float reflectionIntensity = 0.25f;
 
 // Precalculated constants
 const float atmosphereRadius = planetRadius + atmosphereDepth;
@@ -336,6 +339,101 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 	        vec3 planetNormal = normalize(waterPoint - planetOrigin);
 	        float indirectLight = max(dot(planetNormal, sunDirection), 0);
 
+            // Find the direction that this ray is reflected in
+            vec3 reflectDirection = rayDirection - 2 * dot(rayDirection, waveNormal) * waveNormal;
+            float volumetricDepth = 0;
+            vec4 volumetricRes = vec4(0);
+
+            // Accumulate cloud color (volumetricRes) if we hit the cloud shell with the reflected ray
+            float tEnterClouds, tExitClouds;
+            if(intersectSphere(waterPoint, reflectDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
+                float startDepth = 0;
+
+                // Check if we hit the space in between the clouds and the planet (the "inner sphere"). If so, we can skip traversing it as there are no clouds there
+                float tEnterInnerSphere, tExitInnerSphere;
+                if(intersectSphere(waterPoint, reflectDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInnerSphere, tExitInnerSphere) && tExitInnerSphere > 0) {
+                    // If we are inside the space between the clouds and the planet (i.e. if tEnterInnerSphere < 0, i.e. we enter the sphere behind us), jump forward to just before we enter the clouds
+                    startDepth = tEnterInnerSphere <= 0 ? max(tExitInnerSphere, 0.0) - MARCH_SIZE : startDepth;
+                }
+
+                volumetricDepth = startDepth;
+
+                // This is used to keep track of the distance traveled through the clouds
+                float depthTraveledThroughMedium = 0;
+
+                // Raymarch through the cloud shell and accumulate the result
+                for(int i = 0; i < maxReflectionSteps; i++) {
+                    // Get the point at the current depth
+                    vec3 p = waterPoint + reflectDirection * volumetricDepth;
+
+                    // Get the density at the current point
+                    float density = evaluateDensityAt(p, cloudIterations);
+
+                    // Accumulate the result if the density is above 0.0
+                    if(density > 0.0) {
+                        float shadowMultiplier = 1;
+                        float ent, ext;
+
+                        vec3 planetNormal = normalize(p - planetOrigin);
+                        float dotSunPlanet = dot(sunDirection, planetNormal);
+
+                        // Hacky way of determining if a cloud is in shadow, should be updated to be physically correct in the future
+                        // Uses a similar technique to lambertian diffuse lighting, but after the top half of the planet (top half is fully lit)
+                        // The bottom half has a gradient from 1 at the middle to 0 at the bottom, but the gradient can be adjusted:
+                        // lightingFalloff adjusts the cutoff point of the gradient of the bottom half of the planet, for example:
+                        // 1.0 -> gradient extends the whole bottom half
+                        // 0.5 -> gradient extends half of the bottom half
+                        // 0.1 -> gradient extends one 10th of the bottom half
+                        float lightingFalloff = cloudLightingFalloff;
+                        // TODO: calculate lightingFalloff from the difference of the cloudRadius and the atmosphereRadius
+                        float diffuseIntensity = clamp(dotSunPlanet * (1 / lightingFalloff) + 1, 0, 1);
+
+                        // Scale cloud lighting by how far away it is from the closest point on the atmosphere shell, 
+                        // hacky and not (even close to) a physically correct way of achieving darker clouds at the far end of the planet
+                        shadowMultiplier *= diffuseIntensity;
+
+                        float diffuse = clamp((density - evaluateDensityAt(p + 0.3 * sunDirection, cloudIterations)) / 0.3, 0.0, 1.0);
+
+                        float sunViewFactor = clamp(dotSunPlanet * (1 / sunsetCloudWidth) + 1, 0, 1);
+                        // Define the "sunset" color (orange/red) and white for overhead sun
+                        vec3 sunsetColor = vec3(1.0, 0.5, 0.2);
+                        // Interpolate between sunset and overhead color based on angle
+                        vec3 sunColor = mix(sunsetColor, directionalLightColor, sunViewFactor);
+
+                        // Mie Scattering
+                        float mieCosTheta = dot(rayDirection, sunDirection);
+                        float miePhase = HenyeyGreenstein(mieG, mieCosTheta);
+
+                        // Use sunColor in the cloud lighting calculation
+                        vec3 ambientTerm = ambientColor * ambientIntensity;
+                        vec3 lambert = directionalLightIntensityMultiplier * directionalLightColor * sunColor * diffuse;
+                        vec3 mieScattering = mieIntensity * miePhase * directionalLightColor * sunColor;
+                        vec3 lin = ambientTerm + lambert + mieScattering;
+
+                        vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
+                        color.rgb *= lin * shadowMultiplier;
+                        color.rgb *= color.a;
+                        volumetricRes += color * (1.0 - volumetricRes.a);
+
+                        // We can immediately break out of the loop if the transparency is greater than this treshold, the reasoning is that any further steps would contribute an insignificant amount to the pixel color
+                        if(volumetricRes.a >= 0.999) {
+                            break;
+                        }
+                    }
+
+                    // Move forward one step through the medium
+                    // NOTE: We can use a much higher march size (i.e. get a much worse quality result) here than when we do the primary cloud calculations since the reflected ray is affected by (the wave) noise,
+                    //      effectively obscuring the poor quality of the reflected ray. To see the actual reflected result, turn the Water Noise Scale down to 0 and mess around with the Reflection March Size
+                    depthTraveledThroughMedium += reflectionMarchSize;
+                    volumetricDepth = startDepth + depthTraveledThroughMedium;
+
+                    // We can break out of the loop if we hit the opaqueDepth or exit the outer edge of the cloud shell
+                    if(volumetricDepth >= tExitClouds)
+                        break;
+                }
+            }
+
+            // Find the shadow map visibility of this pixel (i.e. if it is visible from the sun)
             vec4 shadowMapCoord = lightMatrix * viewMatrix * vec4(waterPoint, 1.0f);
             float visibility = textureProj(shadowMapTex, shadowMapCoord);
 
@@ -343,7 +441,8 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             vec3 diffuseColor = mix(waterColorShallow, waterColorDeep, normalizedOpticalDepth) * indirectLight;
             // Scale diffuse color in the range of 0.5 - 1 depending on visibility, this ensures that we always get at least 50% of the diffuse contribution
             // Highlight color is scaled by visiblity as no higlight color should contribute to the pixel if it is in shadow
-            vec3 waterColor = diffuseColor * max(visibility, 0.5f) + specularHighlight * visibility; 
+            // volumetricRes (i.e. result of reflected cloud ray) is scaled by the given reflectionIntensity (uniform)
+            vec3 waterColor = diffuseColor * max(visibility, 0.5f) + specularHighlight * visibility + vec3(volumetricRes) * reflectionIntensity;
 
             // The water becomes more opaque the further the ray travels through it
             float alpha = 1 - exp(-waterViewDepth * waterAlphaMultiplier);

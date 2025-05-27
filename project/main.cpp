@@ -106,6 +106,9 @@ float waterNoiseScale = 20;
 float waterFoamWidth = 0.02f;
 vec3 waterColorShallow = vec3(0.553, 0.949, 1);
 vec3 waterColorDeep = vec3(0.012, 0.012, 0.2);
+float maxReflectionSteps = 50;
+float reflectionMarchSize = 0.4f;
+float reflectionIntensity = 0.32f;
 
 // Shadow map settings
 FboInfo shadowMapFB;
@@ -423,6 +426,9 @@ void drawFullscreenQuad(GLuint currentShaderProgram, mat4 viewMatrix, mat4 light
 	labhelper::setUniformSlow(currentShaderProgram, "waterColorDeep", waterColorDeep);
 	labhelper::setUniformSlow(currentShaderProgram, "waterSmoothness", waterSmoothness);
 	labhelper::setUniformSlow(currentShaderProgram, "waterNoiseScale", waterNoiseScale);
+	labhelper::setUniformSlow(currentShaderProgram, "maxReflectionSteps", maxReflectionSteps);
+	labhelper::setUniformSlow(currentShaderProgram, "reflectionMarchSize", reflectionMarchSize);
+	labhelper::setUniformSlow(currentShaderProgram, "reflectionIntensity", reflectionIntensity);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
@@ -474,7 +480,6 @@ void drawScene(GLuint currentShaderProgram,
 	labhelper::setUniformSlow(currentShaderProgram, "waterRadius", waterRadius);
 	labhelper::setUniformSlow(currentShaderProgram, "foamWidth", waterFoamWidth);
 	labhelper::setUniformSlow(currentShaderProgram, "simulationTime", cloudTime);
-
 
 	// Light matrix and depth buffer texture
 	glActiveTexture(GL_TEXTURE10);
@@ -749,6 +754,8 @@ void gui()
 	ImGui::SliderFloat("Water Radius", &waterRadius, 1, 50.0f);
 	ImGui::SliderFloat("Water Smoothness", &waterSmoothness, 0, 0.999f);
 	ImGui::SliderFloat("Water Noise Scale", &waterNoiseScale, 0, 100);
+	ImGui::SliderFloat("Reflection March Size", &reflectionMarchSize, 0.01, 0.5);
+	ImGui::SliderFloat("Reflection Intensity", &reflectionIntensity, 0, 1);
 	ImGui::SliderFloat("Water Depth Multiplier", &waterDepthMultiplier, 0, 10);
 	ImGui::SliderFloat("Water Alpha Multiplier", &waterAlphaMultiplier, 0, 10);
 	ImGui::SliderFloat("Water Foam Width", &waterFoamWidth, 0, 1);
