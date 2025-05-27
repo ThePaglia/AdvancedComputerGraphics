@@ -98,7 +98,7 @@ float atmosphereDensityAtSeaLevel = 0.13f;
 float pointLightIntensityMultiplier = 0.8f;
 
 // Water parameters
-float waterRadius = 13.0f;
+float waterRadius = 16.0f;
 float waterDepthMultiplier = 1.0f;
 float waterAlphaMultiplier = 3.0f;
 float waterSmoothness = 0.9f;
