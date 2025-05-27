@@ -302,7 +302,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     float opaqueDepth = sceneDepth; // NOTE: the opaqueDepth retrieved from the scene texture creates quite a lot of precision errors as you move further away from the planet
 
     float tEnterWater, tExitWater;
-    float waterRadius = 13f;
+    float waterRadius = 13.0f;
     bool isInWater = false;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, waterRadius, tEnterWater, tExitWater) && tExitWater > 0) {
         // Check if this pixel should be affected by water
@@ -311,19 +311,19 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             opaquePoint = rayOrigin + rayDirection * opaqueT;
 
             // NOTE: This method for calculating the water color works... okay if you are above the water line
-            vec3 waterColor = mix(vec3(0.553, 0.949, 1), vec3(0.012, 0.012, 0.2), clamp((opaqueDepth - max(tEnterWater, 0)) / 3f, 0, 1));
+            vec3 waterColor = mix(vec3(0.553, 0.949, 1), vec3(0.012, 0.012, 0.2), clamp((opaqueDepth - max(tEnterWater, 0)) / 3.0, 0, 1));
 
             opaqueDepth = opaqueT;
-            
-	        vec3 planetNormal = normalize(opaquePoint - planetOrigin);
+
+            vec3 planetNormal = normalize(opaquePoint - planetOrigin);
 
 	        // The indirect light contribution is calculated in the same way as in the rasterized fragment shader
-	        float indirectLight = max(dot(planetNormal, sunDirection), 0);
-            
-            vec4 shadowMapCoord = lightMatrix * viewMatrix * vec4(opaquePoint, 1.0f);
+            float indirectLight = max(dot(planetNormal, sunDirection), 0);
+
+            vec4 shadowMapCoord = lightMatrix * viewMatrix * vec4(opaquePoint, 1.0);
             float visibility = textureProj(shadowMapTex, shadowMapCoord);
 
-            opaqueRes.rgb = waterColor * visibility + indirectLight * waterColor * 0.5f;
+            opaqueRes.rgb = waterColor * visibility + indirectLight * waterColor * 0.5;
 
             isInWater = tEnterWater < 0;
         }
