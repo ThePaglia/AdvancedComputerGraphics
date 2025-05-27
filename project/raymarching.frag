@@ -66,6 +66,13 @@ uniform float atmosphereDensityFalloff = 2.0;
 uniform vec3 atmosphereScatteringCoefficients = vec3(0.0, 0.0, 0.0);
 uniform float atmosphereDensityAtSeaLevel = 0.5;
 
+// Water parameters
+uniform float waterRadius = 13f;
+uniform float waterDepthMultiplier = 1f;
+uniform float waterAlphaMultiplier = 3f;
+uniform vec3 waterColorShallow = vec3(0.553, 0.949, 1);
+uniform vec3 waterColorDeep = vec3(0.012, 0.012, 0.2);
+
 // Precalculated constants
 const float atmosphereRadius = planetRadius + atmosphereDepth;
 vec3 sunDirection = normalize(lightPosition);
@@ -302,17 +309,20 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     float opaqueDepth = sceneDepth; // NOTE: the opaqueDepth retrieved from the scene texture creates quite a lot of precision errors as you move further away from the planet
 
     float tEnterWater, tExitWater;
-    float waterRadius = 13f;
     bool isInWater = false;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, waterRadius, tEnterWater, tExitWater) && tExitWater > 0) {
         // Check if this pixel should be affected by water
         if(tEnterWater < opaqueDepth) {
+            // This is the length that the ray travels through the water
+            float waterViewDepth = tEnterWater > 0 ? opaqueDepth - max(tEnterWater, 0) : tExitWater;
+            float normalizedOpticalDepth = 1 - exp(-waterViewDepth * waterDepthMultiplier);
+            float alpha = 1 - exp(-waterViewDepth * waterAlphaMultiplier);
+            // NOTE: This method for calculating the water color works... okay if you are above the water line
+            vec3 waterColor = mix(waterColorShallow, waterColorDeep, normalizedOpticalDepth);
+
+            // Update the opaque point and depth so that cloud shadow calculations are done from the correct point
             float opaqueT = min(tEnterWater < 0 ? tExitWater : tEnterWater, opaqueDepth);
             opaquePoint = rayOrigin + rayDirection * opaqueT;
-
-            // NOTE: This method for calculating the water color works... okay if you are above the water line
-            vec3 waterColor = mix(vec3(0.553, 0.949, 1), vec3(0.012, 0.012, 0.2), clamp((opaqueDepth - max(tEnterWater, 0)) / 3f, 0, 1));
-
             opaqueDepth = opaqueT;
             
 	        vec3 planetNormal = normalize(opaquePoint - planetOrigin);
@@ -323,7 +333,9 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             vec4 shadowMapCoord = lightMatrix * viewMatrix * vec4(opaquePoint, 1.0f);
             float visibility = textureProj(shadowMapTex, shadowMapCoord);
 
-            opaqueRes.rgb = waterColor * visibility + indirectLight * waterColor * 0.5f;
+            waterColor *= visibility + indirectLight * 0.5f;
+
+            opaqueRes.rgb = mix(opaqueRes.rgb, waterColor, alpha);
 
             isInWater = tEnterWater < 0;
         }

@@ -97,6 +97,13 @@ float atmosphereScatteringStrength = 3.0f;
 float atmosphereDensityAtSeaLevel = 0.17f;
 float pointLightIntensityMultiplier = 0.8f;
 
+// Water parameters
+float waterRadius = 13.0f;
+float waterDepthMultiplier = 1.0f;
+float waterAlphaMultiplier = 3.0f;
+vec3 waterColorShallow = vec3(0.553, 0.949, 1);
+vec3 waterColorDeep = vec3(0.012, 0.012, 0.2);
+
 // Shadow map settings
 FboInfo shadowMapFB;
 int shadowMapResolution = 4096;
@@ -390,6 +397,13 @@ void drawFullscreenQuad(GLuint currentShaderProgram, mat4 viewMatrix, mat4 light
 	labhelper::setUniformSlow(currentShaderProgram, "mieIntensity", mieIntensity);
 	labhelper::setUniformSlow(currentShaderProgram, "mieG", mieG);
 	labhelper::setUniformSlow(currentShaderProgram, "beerPowderLaw", beerPowderLaw);
+
+	// Water parameters
+	labhelper::setUniformSlow(currentShaderProgram, "waterRadius", waterRadius);
+	labhelper::setUniformSlow(currentShaderProgram, "waterDepthMultiplier", waterDepthMultiplier);
+	labhelper::setUniformSlow(currentShaderProgram, "waterAlphaMultiplier", waterAlphaMultiplier);
+	labhelper::setUniformSlow(currentShaderProgram, "waterColorShallow", waterColorShallow);
+	labhelper::setUniformSlow(currentShaderProgram, "waterColorDeep", waterColorDeep);
 
 	// uResolution
 	labhelper::setUniformSlow(currentShaderProgram, "uResolution", vec2(windowWidth, windowHeight));
@@ -705,9 +719,14 @@ void gui()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
 				ImGui::GetIO().Framerate);
 	// ----------------------------------------------------------
-	ImGui::Text("Settings");
+	ImGui::Text("Planet Settings");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
 	ImGui::SliderFloat("Planet Radius", &planetRadius, 1, 100.0f);
+	ImGui::SliderFloat("Water Radius", &waterRadius, 1, 100.0f);
+	ImGui::SliderFloat("Water Depth Multiplier", &waterDepthMultiplier, 0, 10);
+	ImGui::SliderFloat("Water Alpha Multiplier", &waterAlphaMultiplier, 0, 10);
+	ImGui::ColorEdit3("Shallow Color", (float*)& waterColorShallow);
+	ImGui::ColorEdit3("Deep Color", (float*)&waterColorDeep);
 
 	ImGui::Text("Clouds");
 	ImGui::SliderInt("Cloud Iterations", &cloudIterations, 1, 10);
