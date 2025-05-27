@@ -321,15 +321,19 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
             // This is the length that the ray travels through the water
             float waterViewDepth = tEnterWater > 0 ? opaqueDepth - max(tEnterWater, 0) : tExitWater;
+            // This is the optical depth of the ray as it travels through the water, think of it as how much of the light will make it from the fragment towards the eye
             float normalizedOpticalDepth = 1 - exp(-waterViewDepth * waterDepthMultiplier);
-            float alpha = 1 - exp(-waterViewDepth * waterAlphaMultiplier);
+            // Calculate some noise for the fragment, this simulates wave-like normals (although they could definitely be improved)
             float normalNoise = noise((waterPoint + vec3(1, 0, 0) * cloudTime) * waterNoiseScale);
                  normalNoise += noise((waterPoint + vec3(0, 1, 0) * cloudTime) * waterNoiseScale * 2);
-	        vec3 planetNormal = normalize(waterPoint + normalNoise) - planetOrigin;
-            float specularAngle = acos(dot(normalize(sunDirection - rayDirection), planetNormal));
+            // The vector pointing from the center of the planet towards this wave
+            vec3 waveNormal = normalize(waterPoint + normalNoise - planetOrigin);
+            // Calculate the specular angle from the planet normal, this creates the specular highlight
+            float specularAngle = acos(dot(normalize(sunDirection - rayDirection), waveNormal));
             float specularExponent = specularAngle / (1 - waterSmoothness);
             vec3 specularHighlight = exp(-specularExponent * specularExponent) * directionalLightColor;
             // The indirect light contribution is calculated in the same way as in the rasterized fragment shader
+	        vec3 planetNormal = normalize(waterPoint - planetOrigin);
 	        float indirectLight = max(dot(planetNormal, sunDirection), 0);
 
             vec4 shadowMapCoord = lightMatrix * viewMatrix * vec4(waterPoint, 1.0f);
@@ -341,6 +345,8 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
             // Highlight color is scaled by visiblity as no higlight color should contribute to the pixel if it is in shadow
             vec3 waterColor = diffuseColor * max(visibility, 0.5f) + specularHighlight * visibility; 
 
+            // The water becomes more opaque the further the ray travels through it
+            float alpha = 1 - exp(-waterViewDepth * waterAlphaMultiplier);
             // Blend between the water color and the original color
             opaqueRes.rgb = mix(opaqueRes.rgb, waterColor, alpha);
 
