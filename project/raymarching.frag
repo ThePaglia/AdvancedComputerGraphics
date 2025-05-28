@@ -464,20 +464,19 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         float cloudDensityAbove = 0;
 
         // Calculate cloud density above (i.e. in the sun's direction) this point
-        float tEnterInner, tExitInner;
         int numShadowSteps = 8;
-        if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner)) {
-            float tEnterOuter, tExitOuter;
-            if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterOuter, tExitOuter) && tExitOuter > 0) {
-                float rayLength = tExitOuter - max(tExitInner, 0);
-                float stepSize = rayLength / (numShadowSteps - 1);
-                for(int i = 0; i < numShadowSteps; i++) {
-                    // You could add the offset here to make shadow artifacting somewhat less noticeable
-                    vec3 p = opaquePoint + sunDirection * (tExitInner + i * stepSize);
+        float tEnterOuter, tExitOuter;
+        if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterOuter, tExitOuter) && tExitOuter > 0) {
+            float tEnterInner, tExitInner;
+            intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner);
+            float rayLength = tExitOuter - max(tExitInner, 0);
+            float stepSize = rayLength / (numShadowSteps - 1);
+            for(int i = 0; i < numShadowSteps; i++) {
+                // You could add the offset here to make shadow artifacting somewhat less noticeable
+                vec3 p = opaquePoint + sunDirection * (tExitInner + i * stepSize);
 
-                    float density = evaluateDensityAt(p, cloudShadowIterations);
-                    cloudDensityAbove += max(density, 0) * stepSize;
-                }
+                float density = evaluateDensityAt(p, cloudShadowIterations);
+                cloudDensityAbove += max(density, 0) * stepSize;
             }
         }
 
