@@ -135,6 +135,7 @@ std::vector<unsigned int> planetIndices;
 mat4 planetModelMatrix;
 
 // Modified code from https://gist.github.com/Pikachuxxxx/5c4c490a7d7679824e0e18af42918efc
+// For now we are just using a UV sphere, this should be updated in the future to use some kind of ico- or fibonacci sphere
 void generatePlanet(int radius, int latitudes, int longitudes)
 {
 	if (longitudes < 3)
@@ -201,11 +202,8 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 			vertices.push_back(glm::vec3(vertex.x, vertex.y, vertex.z));
 			uv.push_back(glm::vec2(vertex.s, vertex.t));
 
-			// normalized vertex normal
-			nx = vertex.x * lengthInv;
-			ny = vertex.y * lengthInv;
-			nz = vertex.z * lengthInv;
-			normals.push_back(glm::vec3(nx, ny, nz));
+			// Initialize normals as (0, 0, 0), we must calculate them once the vertices are done
+			normals.push_back(glm::vec3(0.0f));
 
 			// Color for this vertex
 			colors.push_back(color);
@@ -241,6 +239,31 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 				indices.push_back(k2 + 1);
 			}
 		}
+	}
+
+	// Recalculate normals using face geometry
+	for (size_t i = 0; i < indices.size(); i += 3) {
+		unsigned int i0 = indices[i];
+		unsigned int i1 = indices[i + 1];
+		unsigned int i2 = indices[i + 2];
+
+		vec3 v0 = vertices[i0];
+		vec3 v1 = vertices[i1];
+		vec3 v2 = vertices[i2];
+
+		vec3 edge1 = v1 - v0;
+		vec3 edge2 = v2 - v0;
+		vec3 faceNormal = normalize(cross(edge1, edge2));
+
+		// Accumulate face normals for each vertex
+		normals[i0] += faceNormal;
+		normals[i1] += faceNormal;
+		normals[i2] += faceNormal;
+	}
+
+	// Normalize all vertex normals
+	for (size_t i = 0; i < normals.size(); ++i) {
+		normals[i] = normalize(normals[i]);
 	}
 
 	planetVertices = vertices;

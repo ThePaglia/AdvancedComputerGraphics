@@ -362,6 +362,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 float depthTraveledThroughMedium = 0;
 
                 // Raymarch through the cloud shell and accumulate the result
+                // NOTE: This loop is almost the same as the one where we calculate the primary cloud rays below, but we can make some simplifications since we always start from within the cloud shell
                 for(int i = 0; i < maxReflectionSteps; i++) {
                     // Get the point at the current depth
                     vec3 p = waterPoint + reflectDirection * volumetricDepth;
@@ -467,8 +468,8 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         int numShadowSteps = 8;
         if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner)) {
             float tEnterOuter, tExitOuter;
-            if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterOuter, tExitOuter)) {
-                float rayLength = tExitOuter - tExitInner;
+            if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterOuter, tExitOuter) && tExitOuter > 0) {
+                float rayLength = tExitOuter - max(tExitInner, 0);
                 float stepSize = rayLength / (numShadowSteps - 1);
                 for(int i = 0; i < numShadowSteps; i++) {
                     // You could add the offset here to make shadow artifacting somewhat less noticeable
