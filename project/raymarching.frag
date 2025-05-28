@@ -564,6 +564,11 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 // hacky and not (even close to) a physically correct way of achieving darker clouds at the far end of the planet
                 shadowMultiplier *= diffuseIntensity;
 
+                // Check if this ray point is in shadow from the sun's point of view, manifests as mountains casting shadows on the cloudscape
+                vec4 shadowMapCoord = lightMatrix * viewMatrix * vec4(p, 1.0f);
+                float visibility = textureProj(shadowMapTex, shadowMapCoord);
+                shadowMultiplier *= max(visibility, 0.5f);
+
                 // TODO: perhaps it is possible to increment the opticalDepth using atmosphereDensityAtPoint as we step through the atmosphere? Instead of recalculating it every frame (which the following line does)
                 float viewRayOpticalDepth = atmosphereOpticalDepth(p, -rayDirection, volumetricDepth - max(tEnterAtmosphere, 0));
 
