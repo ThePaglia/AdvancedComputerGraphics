@@ -117,6 +117,8 @@ bool usePolygonOffset = true;
 bool useHardwarePCF = true;
 float polygonOffset_factor = 2.0f;
 float polygonOffset_units = 30000.0f;
+// The normalized distance of the furthest vertex from the planet's origin
+float furthestVertex = 1.0f;
 
 // Render textures, these are rendered to in the rasterizer step, and the result is used in the ray marching shader
 FboInfo rasterizedFBO;
@@ -145,6 +147,8 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 	std::vector<vec2> uv;
 	std::vector<unsigned int> indices;
 	std::vector<vec3> colors;
+
+	furthestVertex = 1.0f;
 
 	float nx, ny, nz, lengthInv = 1.0f / radius; // normal
 	// Temporary vertex
@@ -184,6 +188,7 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 
 			// The terrain height in this direction
 			float height = procedural::getHeightOnUnitSphere(dir);
+			furthestVertex = max(furthestVertex, height);
 			vec3 color = procedural::getColorForHeight(height);
 
 			// The final vertex position is acquired by multiplying the dir by the height value, we effectively get a heightmap mapped onto the sphere
@@ -547,7 +552,8 @@ void display(void)
 
 	mat4 lightViewMatrix = lookAt(lightPosition, vec3(0.0f), worldUp);
 	// We scale the orthographic "frustum" to the planet's radius so that we get the most out of the shadow map
-	mat4 lightProjMatrix = ortho(-planetRadius, planetRadius, -planetRadius, planetRadius, 10.0f, 100.0f);
+	float orthoWidth = planetRadius * furthestVertex;
+	mat4 lightProjMatrix = ortho(-orthoWidth, orthoWidth, -orthoWidth, orthoWidth, 10.0f, 100.0f);
 
 	///////////////////////////////////////////////////////////////////////////
 	// Set Up and draw to Shadow Map
