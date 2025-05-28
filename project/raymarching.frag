@@ -467,6 +467,8 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         int numShadowSteps = 8;
         float tEnterOuter, tExitOuter;
         if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterOuter, tExitOuter) && tExitOuter > 0) {
+            // This method works well as long as the ray starts inside of the cloud shell (i.e. within cloudlessDepth) but breaks if the ray starts outside of the inner shell
+            // It breaks because we don't skip forward through the empty space, as we do in the volumetric calculations below
             float tEnterInner, tExitInner;
             intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner);
             float rayLength = tExitOuter - max(tExitInner, 0);
