@@ -134,11 +134,25 @@ std::vector<vec3> planetColors;
 std::vector<vec2> planetUVs;
 std::vector<unsigned int> planetIndices;
 mat4 planetModelMatrix;
+// SSBOs used by the compute shader
+GLuint posSSBO, colorSSBO;
+
+// Planet parameters
+int planetNoiseOctaves = 6;
+float planetNoiseLacunarity = 2.0f;
+float planetNoiseGain = 0.45f;
+int prevPlanetNoiseOctaves = 6;
+float prevPlanetNoiseLacunarity = 2.0f;
+float prevPlanetNoiseGain = 0.45f;
 
 // Modified code from https://gist.github.com/Pikachuxxxx/5c4c490a7d7679824e0e18af42918efc
 // For now we are just using a UV sphere, this should be updated in the future to use some kind of ico- or fibonacci sphere
-void generatePlanet(int radius, int latitudes, int longitudes)
+void generatePlanet()
 {
+	int radius = 1;
+	int latitudes = 600;
+	int longitudes = 600;
+
 	if (longitudes < 3)
 		longitudes = 3;
 	if (latitudes < 2)
@@ -163,28 +177,24 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 	float deltaLongitude = 2 * M_PI / longitudes;
 	float latitudeAngle;
 	float longitudeAngle;
-
-
-
-
 	int totalVertices = (latitudes + 1) * (longitudes + 1);
 
-	// Create and bind SSBOs
-	GLuint posSSBO, colorSSBO;
-	glGenBuffers(1, &posSSBO);
+	
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, posSSBO);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, totalVertices * sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, totalVertices * sizeof(vec4), nullptr, GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, posSSBO);
 
-	glGenBuffers(1, &colorSSBO);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, colorSSBO);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, totalVertices * sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, totalVertices * sizeof(vec4), nullptr, GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, colorSSBO);
 
 	glUseProgram(computeProgram);
 	glUniform1i(glGetUniformLocation(computeProgram, "latitudes"), latitudes);
 	glUniform1i(glGetUniformLocation(computeProgram, "longitudes"), longitudes);
 	glUniform1f(glGetUniformLocation(computeProgram, "radius"), 1.0f); // unit sphere
+	labhelper::setUniformSlow(computeProgram, "noiseOctaves", planetNoiseOctaves);
+	labhelper::setUniformSlow(computeProgram, "noiseLacunarity", planetNoiseLacunarity);
+	labhelper::setUniformSlow(computeProgram, "noiseGain", planetNoiseGain);
 
 	GLuint groupX = (GLuint)ceil((longitudes + 1) / 16.0f);
 	GLuint groupY = (GLuint)ceil((latitudes + 1) / 16.0f);
@@ -192,16 +202,16 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, posSSBO);
-	glm::vec4* positions = (glm::vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+	vec4* computePositions = (vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+	glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, colorSSBO);
+	vec4* computeColors = (vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 	glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
 	// Compute all vertices first except normals
 	for (int i = 0; i <= latitudes; ++i)
 	{
-		latitudeAngle = M_PI / 2 - i * deltaLatitude; /* Starting -pi/2 to pi/2 */
-		float xy = radius * cosf(latitudeAngle);	  /* r * cos(phi) */
-		float z = radius * sinf(latitudeAngle);		  /* r * sin(phi )*/
-
 		/*
 		 * We add (latitudes + 1) vertices per longitude because of equator,
 		 * the North pole and South pole are not counted here, as they overlap.
@@ -211,12 +221,13 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 		for (int j = 0; j <= longitudes; ++j)
 		{
 			int index = i * (longitudes + 1) + j;
-			glm::vec3 pos = positions[index];
+			vec4 pos = computePositions[index];
 
 			// The terrain height in this direction
-			vertices.push_back(pos);
-			float height = glm::length(pos); // if you still need it
-			furthestVertex = std::max(furthestVertex, height);
+			vertices.push_back(vec3(pos));
+			// The height is calculated in the compute shader and returned in the alpha channel
+			float height = pos.a;
+			furthestVertex = max(furthestVertex, height);
 
 			float s = (float)j / longitudes; /* s */
 			float t = (float)i / latitudes;  /* t */
@@ -225,8 +236,10 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 			// Initialize normals as (0, 0, 0), we must calculate them once the vertices are done
 			normals.push_back(vec3(0.0f));
 
+			vec3 color = computeColors[index];
+
 			// Color for this vertex
-			colors.push_back(vec3(1));
+			colors.push_back(color);
 		}
 	}
 
@@ -293,10 +306,45 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 	planetColors = colors;
 }
 
+void regeneratePlanet()
+{
+	generatePlanet();
+
+	// Set it as current, i.e., related calls will affect this object
+	glBindVertexArray(planetVAO);
+
+	// Set the newly created buffer as the current one
+	glBindBuffer(GL_ARRAY_BUFFER, planetPositionBuffer);
+	// Send the vertex position data to the current buffer
+	glBufferData(GL_ARRAY_BUFFER, planetVertices.size() * sizeof(vec3), planetVertices.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, false /*normalized*/, 0 /*stride*/, 0 /*offset*/);
+	// Enable the attribute
+	glEnableVertexAttribArray(0);
+
+	glBindBuffer(GL_ARRAY_BUFFER, planetNormalBuffer);
+	// Send the vertex normal data to the current buffer
+	glBufferData(GL_ARRAY_BUFFER, planetNormals.size() * sizeof(vec3), planetNormals.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(1, 3, GL_FLOAT, false /*normalized*/, 0 /*stride*/, 0 /*offset*/);
+	// Enable the attribute
+	glEnableVertexAttribArray(1);
+
+	glBindBuffer(GL_ARRAY_BUFFER, planetColorBuffer);
+	glBufferData(GL_ARRAY_BUFFER, planetColors.size() * sizeof(vec3), planetColors.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(3, 3, GL_FLOAT, false, 0, 0);
+	glEnableVertexAttribArray(3);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planetIndexBuffer);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, planetIndices.size() * sizeof(unsigned int), planetIndices.data(),
+		GL_STATIC_DRAW);
+}
+
 void initializePlanet()
 {
+	glGenBuffers(1, &posSSBO);
+	glGenBuffers(1, &colorSSBO);
+
 	// Generate a fairly high-def planet
-	generatePlanet(1, 600, 600);
+	generatePlanet();
 
 	///////////////////////////////////////////////////////////////////////////
 	// Create the vertex array object
@@ -805,6 +853,9 @@ void gui()
 	// ----------------------------------------------------------
 	ImGui::Text("Planet Settings");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
+	ImGui::SliderInt("Noise Octaves", &planetNoiseOctaves, 1, 10);
+	ImGui::SliderFloat("Noise Lacunarity", &planetNoiseLacunarity, 0, 8);
+	ImGui::SliderFloat("Noise Gain", &planetNoiseGain, 0, 1);
 	ImGui::SliderFloat("Planet Radius", &planetRadius, 1, 50.0f);
 	ImGui::SliderFloat("Water Radius", &waterRadius, 1, 50.0f);
 	ImGui::SliderFloat("Water Smoothness", &waterSmoothness, 0, 0.999f);
@@ -855,6 +906,20 @@ void gui()
 	labhelper::perf::drawEventsWindow();
 }
 
+void regeneratePlanetIfParameterChanged()
+{
+	float diff = prevPlanetNoiseOctaves - planetNoiseOctaves + prevPlanetNoiseLacunarity - planetNoiseLacunarity + prevPlanetNoiseGain - planetNoiseGain;
+
+	prevPlanetNoiseOctaves = planetNoiseOctaves;
+	prevPlanetNoiseLacunarity = planetNoiseLacunarity;
+	prevPlanetNoiseGain = planetNoiseGain;
+
+	if (diff == 0)
+		return;
+
+	regeneratePlanet();
+}
+
 int main(int argc, char* argv[])
 {
 	g_window = labhelper::init_window_SDL("OpenGL Project");
@@ -884,6 +949,8 @@ int main(int argc, char* argv[])
 
 		// Render overlay GUI.
 		gui();
+
+		regeneratePlanetIfParameterChanged();
 
 		// Finish the frame and render the GUI
 		labhelper::finishFrame();
