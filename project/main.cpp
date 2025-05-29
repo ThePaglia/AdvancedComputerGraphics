@@ -144,25 +144,18 @@ float planetNoiseGain = 0.45f;
 int prevPlanetNoiseOctaves = 6;
 float prevPlanetNoiseLacunarity = 2.0f;
 float prevPlanetNoiseGain = 0.45f;
+int radius = 1;
+int latitudes = 600;
+int longitudes = 600;
 
 // Modified code from https://gist.github.com/Pikachuxxxx/5c4c490a7d7679824e0e18af42918efc
 // For now we are just using a UV sphere, this should be updated in the future to use some kind of ico- or fibonacci sphere
 void generatePlanet()
 {
-	int radius = 1;
-	int latitudes = 600;
-	int longitudes = 600;
-
 	if (longitudes < 3)
 		longitudes = 3;
 	if (latitudes < 2)
 		latitudes = 2;
-
-	std::vector<vec3> vertices;
-	std::vector<vec3> normals;
-	std::vector<vec2> uv;
-	std::vector<unsigned int> indices;
-	std::vector<vec3> colors;
 
 	furthestVertex = 1.0f;
 
@@ -178,7 +171,6 @@ void generatePlanet()
 	float latitudeAngle;
 	float longitudeAngle;
 	int totalVertices = (latitudes + 1) * (longitudes + 1);
-
 	
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, posSSBO);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, totalVertices * sizeof(vec4), nullptr, GL_DYNAMIC_DRAW);
@@ -224,22 +216,19 @@ void generatePlanet()
 			vec4 pos = computePositions[index];
 
 			// The terrain height in this direction
-			vertices.push_back(vec3(pos));
+			planetVertices[index] = vec3(pos);
 			// The height is calculated in the compute shader and returned in the alpha channel
 			float height = pos.a;
 			furthestVertex = max(furthestVertex, height);
 
 			float s = (float)j / longitudes; /* s */
 			float t = (float)i / latitudes;  /* t */
-			uv.push_back(vec2(s, t));
-
-			// Initialize normals as (0, 0, 0), we must calculate them once the vertices are done
-			normals.push_back(vec3(0.0f));
+			planetUVs[index] = vec2(s, t);
 
 			vec3 color = computeColors[index];
 
 			// Color for this vertex
-			colors.push_back(color);
+			planetColors[index] = color;
 		}
 	}
 
@@ -251,6 +240,7 @@ void generatePlanet()
 	 *  k2--k2+1
 	 */
 	unsigned int k1, k2;
+	unsigned int indexCounter = 0;
 	for (int i = 0; i < latitudes; ++i)
 	{
 		k1 = i * (longitudes + 1);
@@ -260,50 +250,44 @@ void generatePlanet()
 		{
 			if (i != 0)
 			{
-				indices.push_back(k1);
-				indices.push_back(k2);
-				indices.push_back(k1 + 1);
+				planetIndices[indexCounter++] = k1;
+				planetIndices[indexCounter++] = k2;
+				planetIndices[indexCounter++] = k1 + 1;
 			}
 
 			if (i != (latitudes - 1))
 			{
-				indices.push_back(k1 + 1);
-				indices.push_back(k2);
-				indices.push_back(k2 + 1);
+				planetIndices[indexCounter++] = k1 + 1;
+				planetIndices[indexCounter++] = k2;
+				planetIndices[indexCounter++] = k2 + 1;
 			}
 		}
 	}
 
 	// Recalculate normals using face geometry
-	for (size_t i = 0; i < indices.size(); i += 3) {
-		unsigned int i0 = indices[i];
-		unsigned int i1 = indices[i + 1];
-		unsigned int i2 = indices[i + 2];
+	for (size_t i = 0; i < planetIndices.size(); i += 3) {
+		unsigned int i0 = planetIndices[i];
+		unsigned int i1 = planetIndices[i + 1];
+		unsigned int i2 = planetIndices[i + 2];
 
-		vec3 v0 = vertices[i0];
-		vec3 v1 = vertices[i1];
-		vec3 v2 = vertices[i2];
+		vec3 v0 = planetVertices[i0];
+		vec3 v1 = planetVertices[i1];
+		vec3 v2 = planetVertices[i2];
 
 		vec3 edge1 = v1 - v0;
 		vec3 edge2 = v2 - v0;
 		vec3 faceNormal = normalize(cross(edge1, edge2));
 
 		// Accumulate face normals for each vertex
-		normals[i0] += faceNormal;
-		normals[i1] += faceNormal;
-		normals[i2] += faceNormal;
+		planetNormals[i0] += faceNormal;
+		planetNormals[i1] += faceNormal;
+		planetNormals[i2] += faceNormal;
 	}
 
 	// Normalize all vertex normals
-	for (size_t i = 0; i < normals.size(); ++i) {
-		normals[i] = normalize(normals[i]);
+	for (size_t i = 0; i < planetNormals.size(); ++i) {
+		planetNormals[i] = normalize(planetNormals[i]);
 	}
-
-	planetVertices = vertices;
-	planetNormals = normals;
-	planetUVs = uv;
-	planetIndices = indices;
-	planetColors = colors;
 }
 
 void regeneratePlanet()
@@ -342,6 +326,21 @@ void initializePlanet()
 {
 	glGenBuffers(1, &posSSBO);
 	glGenBuffers(1, &colorSSBO);
+
+	// Calculate the total amount of vertices in the planet
+	int totalVertices = (latitudes + 1) * (longitudes + 1);
+
+	// Initialize planet vectors with the exact correct size
+	std::vector<vec3> vertices(totalVertices);
+	std::vector<vec3> normals(totalVertices);
+	std::vector<vec2> uv(totalVertices);
+	std::vector<unsigned int> indices(latitudes * longitudes * 6);
+	std::vector<vec3> colors(totalVertices);
+	planetVertices = vertices;
+	planetNormals = normals;
+	planetUVs = uv;
+	planetIndices = indices;
+	planetColors = colors;
 
 	// Generate a fairly high-def planet
 	generatePlanet();
