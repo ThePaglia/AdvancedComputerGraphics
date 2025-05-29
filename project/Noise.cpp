@@ -284,11 +284,11 @@ namespace procedural
 	{
 		if (height < 1.0f)				   // Below sea level
 			return vec3(0.0f, 0.2f, 0.7f); // Deep blue
-		else if (height < 1.02f)
+		else if (height < 1.1f)
 			return vec3(0.9f, 0.85f, 0.6f); // Sand/beach
 		else if (height < 1.2f)
 			return vec3(0.13f, 0.55f, 0.13f); // Green (grass)
-		else if (height < 1.5f)
+		else if (height < 1.3f)
 			return vec3(0.5f, 0.36f, 0.33f); // Brown (mountain)
 		else
 			return vec3(1.0f, 1.0f, 1.0f); // White (snow)
