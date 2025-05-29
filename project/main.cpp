@@ -865,8 +865,8 @@ void gui()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
 		ImGui::GetIO().Framerate);
 	// ----------------------------------------------------------
-	ImGui::Text("Planet Settings");
 	ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.1f, 100.0f);
+	ImGui::Text("Planet Settings");
 	ImGui::SliderInt("Noise Octaves", &planetNoiseOctaves, 1, 10);
 	ImGui::SliderFloat("Noise Lacunarity", &planetNoiseLacunarity, 0, 8);
 	ImGui::SliderFloat("Noise Gain", &planetNoiseGain, 0, 1);
