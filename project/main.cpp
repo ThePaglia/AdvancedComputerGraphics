@@ -135,7 +135,7 @@ std::vector<vec2> planetUVs;
 std::vector<unsigned int> planetIndices;
 mat4 planetModelMatrix;
 // SSBOs used by the compute shader
-GLuint posSSBO, colorSSBO;
+GLuint posSSBO, colorSSBO, normalSSBO;
 
 // Planet parameters
 int planetNoiseOctaves = 6;
@@ -180,6 +180,10 @@ void generatePlanet()
 	glBufferData(GL_SHADER_STORAGE_BUFFER, totalVertices * sizeof(vec4), nullptr, GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, colorSSBO);
 
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, normalSSBO);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, totalVertices * sizeof(vec4), nullptr, GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, normalSSBO);
+
 	glUseProgram(computeProgram);
 	glUniform1i(glGetUniformLocation(computeProgram, "latitudes"), latitudes);
 	glUniform1i(glGetUniformLocation(computeProgram, "longitudes"), longitudes);
@@ -201,6 +205,11 @@ void generatePlanet()
 	vec4* computeColors = (vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 	glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
+	// The compute shader calculates an approximate normal for each vertex, it would be better to do this in a separate shader pass after generating the vertices
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, normalSSBO);
+	vec4* computeNormals = (vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+	glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
 	// Compute all vertices first except normals
 	for (int i = 0; i <= latitudes; ++i)
 	{
@@ -214,21 +223,22 @@ void generatePlanet()
 		{
 			int index = i * (longitudes + 1) + j;
 			vec4 pos = computePositions[index];
-
 			// The terrain height in this direction
 			planetVertices[index] = vec3(pos);
 			// The height is calculated in the compute shader and returned in the alpha channel
 			float height = pos.a;
 			furthestVertex = max(furthestVertex, height);
 
+			// Color for this vertex
+			vec3 color = computeColors[index];
+			planetColors[index] = color;
+
+			vec3 normal = computeNormals[index];
+			planetNormals[index] = normal;
+			
 			float s = (float)j / longitudes; /* s */
 			float t = (float)i / latitudes;  /* t */
 			planetUVs[index] = vec2(s, t);
-
-			vec3 color = computeColors[index];
-
-			// Color for this vertex
-			planetColors[index] = color;
 		}
 	}
 
@@ -264,6 +274,9 @@ void generatePlanet()
 		}
 	}
 
+	// CPU-side correct calculation of normals
+	// TODO: Implement this algorithm on the GPU as two separate shader passes
+	/*
 	// Recalculate normals using face geometry
 	for (size_t i = 0; i < planetIndices.size(); i += 3) {
 		unsigned int i0 = planetIndices[i];
@@ -288,6 +301,7 @@ void generatePlanet()
 	for (size_t i = 0; i < planetNormals.size(); ++i) {
 		planetNormals[i] = normalize(planetNormals[i]);
 	}
+	*/
 }
 
 void regeneratePlanet()
@@ -326,6 +340,7 @@ void initializePlanet()
 {
 	glGenBuffers(1, &posSSBO);
 	glGenBuffers(1, &colorSSBO);
+	glGenBuffers(1, &normalSSBO);
 
 	// Calculate the total amount of vertices in the planet
 	int totalVertices = (latitudes + 1) * (longitudes + 1);

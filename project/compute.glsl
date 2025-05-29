@@ -11,6 +11,10 @@ layout (binding = 1) buffer ColorBuffer {
     vec4 colors[]; // r, g, b, a
 };
 
+layout (binding = 2) buffer NormalBuffer {
+    vec4 normals[]; // x, y, z, unused
+};
+
 // Uniforms from CPU
 uniform int latitudes;
 uniform int longitudes;
@@ -309,31 +313,56 @@ vec3 getColorForHeight(float height)
 		return vec3(1.0f, 1.0f, 1.0f); // White (snow)
 }
 
+vec3 sphericalToCartesian(float lat, float lon) {
+    float xy = radius * cos(lat);
+    float z = radius * sin(lat);
+    return vec3(xy * cos(lon), xy * sin(lon), z);
+}
+
 void main() {
-    uint i = gl_GlobalInvocationID.y; // latitude index
-    uint j = gl_GlobalInvocationID.x; // longitude index
+    uint i = gl_GlobalInvocationID.y;
+    uint j = gl_GlobalInvocationID.x;
 
     if (i > uint(latitudes) || j > uint(longitudes)) return;
 
     float deltaLat = PI / float(latitudes);
     float deltaLon = 2.0 * PI / float(longitudes);
-    float latitudeAngle = PI / 2.0 - float(i) * deltaLat;
-    float longitudeAngle = float(j) * deltaLon;
 
-    float xy = radius * cos(latitudeAngle);
-    float z = radius * sin(latitudeAngle);
+    float lat = PI / 2.0 - float(i) * deltaLat;
+    float lon = float(j) * deltaLon;
 
-    vec3 dir;
-    dir.x = xy * cos(longitudeAngle);
-    dir.y = xy * sin(longitudeAngle);
-    dir.z = z;
-    dir = normalize(dir);
+    vec3 dir = normalize(sphericalToCartesian(lat, lon));
+    float h = getHeightOnUnitSphere(dir);
+    vec3 pos = dir * h;
 
-    float height = getHeightOnUnitSphere(dir);
-    vec3 pos = dir * height;
-    vec3 col = getColorForHeight(height);
+    // Central difference offsets
+    int iUp = int(clamp(int(i) + 1, 0, latitudes));
+    int iDown = int(clamp(int(i) - 1, 0, latitudes));
+    int jRight = int(j + 1) % (longitudes + 1);
+    int jLeft = int(j + longitudes) % (longitudes + 1); // handles wraparound
 
-    uint index = i * uint(longitudes + 1) + j;
-    positions[index] = vec4(pos, height);
-    colors[index] = vec4(col, 1.0);
+    float latUp = PI / 2.0 - float(iUp) * deltaLat;
+    float latDown = PI / 2.0 - float(iDown) * deltaLat;
+    float lonRight = float(jRight) * deltaLon;
+    float lonLeft = float(jLeft) * deltaLon;
+
+    vec3 dirLatUp = normalize(sphericalToCartesian(latUp, lon));
+    vec3 dirLatDown = normalize(sphericalToCartesian(latDown, lon));
+    vec3 dirLonRight = normalize(sphericalToCartesian(lat, lonRight));
+    vec3 dirLonLeft = normalize(sphericalToCartesian(lat, lonLeft));
+
+    vec3 posLatUp = dirLatUp * getHeightOnUnitSphere(dirLatUp);
+    vec3 posLatDown = dirLatDown * getHeightOnUnitSphere(dirLatDown);
+    vec3 posLonRight = dirLonRight * getHeightOnUnitSphere(dirLonRight);
+    vec3 posLonLeft = dirLonLeft * getHeightOnUnitSphere(dirLonLeft);
+
+    vec3 dLat = posLatUp - posLatDown;
+    vec3 dLon = posLonRight - posLonLeft;
+
+    vec3 normal = normalize(cross(dLat, dLon));
+
+    uint index = i * (longitudes + 1u) + j;
+    positions[index] = vec4(pos, h);
+    colors[index] = vec4(getColorForHeight(h), 1.0);
+    normals[index] = vec4(normal, 1.0);
 }
