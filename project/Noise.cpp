@@ -257,7 +257,7 @@ namespace procedural
 		}
 		return sum / maxSum;
 	}
-	// TODO: Implement depressions and lakes
+
 	float getHeightOnUnitSphere(vec3 point)
 	{
 		// Fractal noise for more detail
@@ -279,7 +279,6 @@ namespace procedural
 	}
 
 	// Function to get color based on height
-	// TODO: Adjust colors
 	vec3 getColorForHeight(float height)
 	{
 		if (height < 1.0f)				   // Below sea level

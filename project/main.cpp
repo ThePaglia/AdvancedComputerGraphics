@@ -535,7 +535,7 @@ void drawScene(GLuint currentShaderProgram,
 	glDrawElements(GL_TRIANGLES, planetIndices.size(), GL_UNSIGNED_INT, 0);
 
 	// Ship
-	float d = 16 + sin(cloudTime * 2) * 0.25f;
+	float d = 16.5 + sin(cloudTime * 2) * 0.25f;
 	mat4 shipMatrix = rotate(radians(25.0f), vec3(0, 0, 1)) * translate(vec3(0, d, 0)) * scale(vec3(0.05f));
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewProjectionMatrix", projectionMatrix * viewMatrix * shipMatrix);
 	labhelper::setUniformSlow(currentShaderProgram, "modelViewMatrix", viewMatrix * shipMatrix);
@@ -788,7 +788,7 @@ void gui()
 	ImGui::SliderFloat("Water Depth Multiplier", &waterDepthMultiplier, 0, 10);
 	ImGui::SliderFloat("Water Alpha Multiplier", &waterAlphaMultiplier, 0, 10);
 	ImGui::SliderFloat("Water Foam Width", &waterFoamWidth, 0, 1);
-	ImGui::ColorEdit3("Shallow Color", (float*)& waterColorShallow);
+	ImGui::ColorEdit3("Shallow Color", (float*)&waterColorShallow);
 	ImGui::ColorEdit3("Deep Color", (float*)&waterColorDeep);
 
 	ImGui::Text("Clouds");

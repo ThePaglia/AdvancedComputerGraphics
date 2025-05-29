@@ -43,7 +43,7 @@ uniform mat4 viewInverse;
 uniform vec3 viewSpaceLightPosition;
 uniform vec3 planetOrigin = vec3(0, 0, 0);
 uniform float waterRadius;
-uniform float foamWidth = 0.05f;
+uniform float foamWidth = 0.05;
 uniform float simulationTime = 1.0;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -100,12 +100,18 @@ void main() {
 	vec3 wo = -normalize(viewSpacePosition);
 	vec3 n = normalize(viewSpaceNormal);
 
-	float distanceToWater = length(vec3(viewInverse * vec4(viewSpacePosition, 1.0f)) - planetOrigin) - (waterRadius + sin(simulationTime * 10) * foamWidth * 0.5f);
-	// The base color is set to white if it is close enough to the shoreline. This creates a quick and hacky version of a foamy shoreline but is not correct as it is displayed on the geometry itself
-	vec3 base_color = abs(distanceToWater) < foamWidth ? vec3(1) : vertexColor;
+	float distanceToWater = length(vec3(viewInverse * vec4(viewSpacePosition, 1.0)) - planetOrigin) - (waterRadius + sin(simulationTime * 10) * foamWidth * 0.5);
+	// Material color is the default
+	vec3 base_color = material_color;
 
-	if(has_color_texture == 1) {
+	// The base color is set to white if it is close enough to the shoreline. This creates a quick and hacky version of a foamy shoreline but is not correct as it is displayed on the geometry itself
+	// Only apply shoreline foam if this is terrain (vertexColor is set)
+	if(length(vertexColor) > 0.001 && abs(distanceToWater) < foamWidth) {
+		base_color = vec3(1);
+	} else if(has_color_texture == 1) {
 		base_color = texture(colorMap, texCoord).rgb;
+	} else if(length(vertexColor) > 0.001) {
+		base_color = vertexColor;
 	}
 
 	// Direct illumination
