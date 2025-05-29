@@ -37,10 +37,11 @@ bool g_doMouseLookaround = false;
 ///////////////////////////////////////////////////////////////////////////////
 // Shader programs
 ///////////////////////////////////////////////////////////////////////////////
-GLuint raymarchingProgram; // Shader for rendering all ray marched effects (clouds, cloud shadows & atmosphere)
-GLuint shaderProgram;	   // Shader for rendering the final image
-GLuint depthProgram;	   // Shader used to draw the shadow map
-GLuint simpleProgram;	   // Shader used for testing
+GLuint raymarchingProgram;	// Shader for rendering all ray marched effects (clouds, cloud shadows & atmosphere)
+GLuint shaderProgram;		// Shader for rendering the final image
+GLuint depthProgram;		// Shader used to draw the shadow map
+GLuint simpleProgram;		// Shader used for testing
+GLuint computeProgram;		// Shader used for computing the terrain heights
 
 // Camera parameters.
 vec3 worldUp(0.0f, 1.0f, 0.0f);
@@ -163,6 +164,37 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 	float latitudeAngle;
 	float longitudeAngle;
 
+
+
+
+	int totalVertices = (latitudes + 1) * (longitudes + 1);
+
+	// Create and bind SSBOs
+	GLuint posSSBO, colorSSBO;
+	glGenBuffers(1, &posSSBO);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, posSSBO);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, totalVertices * sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, posSSBO);
+
+	glGenBuffers(1, &colorSSBO);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, colorSSBO);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, totalVertices * sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, colorSSBO);
+
+	glUseProgram(computeProgram);
+	glUniform1i(glGetUniformLocation(computeProgram, "latitudes"), latitudes);
+	glUniform1i(glGetUniformLocation(computeProgram, "longitudes"), longitudes);
+	glUniform1f(glGetUniformLocation(computeProgram, "radius"), 1.0f); // unit sphere
+
+	GLuint groupX = (GLuint)ceil((longitudes + 1) / 16.0f);
+	GLuint groupY = (GLuint)ceil((latitudes + 1) / 16.0f);
+	glDispatchCompute(groupX, groupY, 1);
+	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, posSSBO);
+	glm::vec4* positions = (glm::vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+	glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
 	// Compute all vertices first except normals
 	for (int i = 0; i <= latitudes; ++i)
 	{
@@ -178,35 +210,23 @@ void generatePlanet(int radius, int latitudes, int longitudes)
 		 */
 		for (int j = 0; j <= longitudes; ++j)
 		{
-			longitudeAngle = j * deltaLongitude;
-
-			// dir points from the center of the sphere towards this vertex's point on the unit sphere. It is used to scale the points according to noise
-			vec3 dir;
-			dir.x = xy * cosf(longitudeAngle); /* x = r * cos(phi) * cos(theta)  */
-			dir.y = xy * sinf(longitudeAngle); /* y = r * cos(phi) * sin(theta) */
-			dir.z = z;						   /* z = r * sin(phi) */
-			dir = normalize(dir);
+			int index = i * (longitudes + 1) + j;
+			glm::vec3 pos = positions[index];
 
 			// The terrain height in this direction
-			float height = procedural::getHeightOnUnitSphere(dir);
-			furthestVertex = max(furthestVertex, height);
-			vec3 color = procedural::getColorForHeight(height);
+			vertices.push_back(pos);
+			float height = glm::length(pos); // if you still need it
+			furthestVertex = std::max(furthestVertex, height);
 
-			// The final vertex position is acquired by multiplying the dir by the height value, we effectively get a heightmap mapped onto the sphere
-			Vertex vertex;
-			vertex.x = dir.x * height;
-			vertex.y = dir.y * height;
-			vertex.z = dir.z * height;
-			vertex.s = (float)j / longitudes; /* s */
-			vertex.t = (float)i / latitudes;  /* t */
-			vertices.push_back(glm::vec3(vertex.x, vertex.y, vertex.z));
-			uv.push_back(glm::vec2(vertex.s, vertex.t));
+			float s = (float)j / longitudes; /* s */
+			float t = (float)i / latitudes;  /* t */
+			uv.push_back(vec2(s, t));
 
 			// Initialize normals as (0, 0, 0), we must calculate them once the vertices are done
-			normals.push_back(glm::vec3(0.0f));
+			normals.push_back(vec3(0.0f));
 
 			// Color for this vertex
-			colors.push_back(color);
+			colors.push_back(vec3(1));
 		}
 	}
 
@@ -351,6 +371,12 @@ void loadShaders(bool is_reload)
 	if (shader != 0)
 	{
 		simpleProgram = shader;
+	}
+
+	shader = labhelper::loadComputeShader("../project/compute.glsl", is_reload);
+	if (shader != 0)
+	{
+		computeProgram = shader;
 	}
 }
 

@@ -553,6 +553,46 @@ namespace labhelper
 		return log;
 	}
 
+	GLuint loadComputeShader(const std::string& filePath, bool allow_errors) {
+		GLuint cShader = glCreateShader(GL_COMPUTE_SHADER);
+
+		std::ifstream cs_file(filePath);
+		std::string cs_src((std::istreambuf_iterator<char>(cs_file)), std::istreambuf_iterator<char>());
+
+		const char* cs = cs_src.c_str();
+
+		glShaderSource(cShader, 1, &cs, nullptr);
+		// text data is not needed beyond this point
+
+		glCompileShader(cShader);
+		int compileOk = 0;
+		glGetShaderiv(cShader, GL_COMPILE_STATUS, &compileOk);
+		if (!compileOk)
+		{
+			std::string err = GetShaderInfoLog(cShader);
+			if (allow_errors)
+			{
+				non_fatal_error(err, "Compute Shader");
+			}
+			else
+			{
+				fatal_error(err, "Compute Shader");
+			}
+			return 0;
+		}
+
+		GLuint shaderProgram = glCreateProgram();
+		glAttachShader(shaderProgram, cShader);
+		glDeleteShader(cShader);
+		if (!allow_errors)
+			CHECK_GL_ERROR();
+
+		if (!linkShaderProgram(shaderProgram, allow_errors))
+			return 0;
+
+		return shaderProgram;
+	}
+
 	GLuint loadShaderProgram(const std::string& vertexShader, const std::string& fragmentShader, bool allow_errors)
 	{
 		GLuint vShader = glCreateShader(GL_VERTEX_SHADER);

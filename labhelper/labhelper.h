@@ -129,6 +129,9 @@ namespace labhelper
 		 */
 	std::string GetShaderInfoLog(GLuint obj);
 
+	GLuint loadComputeShader(const std::string& computeShader,
+		bool allow_errors = false);
+
 	/**
 		 * Loads and compiles a fragment and vertex shader. Then creates a shader program
 		 * and attaches the shaders. Does NOT link the program, this is done with  linkShaderProgram()
