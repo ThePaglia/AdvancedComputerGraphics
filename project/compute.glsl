@@ -23,6 +23,8 @@ uniform float PI = 3.14159265359;
 uniform int noiseOctaves = 6;
 uniform float noiseLacunarity = 2.0f;
 uniform float noiseGain = 0.45f;
+uniform float amplitude = 1.0f;
+uniform	float frequency = 1.0f;
 
 int Source[] = {
 	151, 160, 137, 91, 90, 15, 131, 13, 201, 95, 96, 53, 194, 233, 7, 225, 140, 36, 103, 30, 69, 142,
@@ -263,17 +265,17 @@ float get3DSimplexNoiseAtPointOnUnitSphere(vec3 point)
 // Helper: Fractal (octave) noise
 float fractalSimplexNoise(vec3 point, int octaves = 5, float lacunarity = 2.0f, float gain = 0.5f)
 {
-	float amplitude = 1.0f;
-	float frequency = 1.0f;
+	float a = amplitude;
+	float f = frequency;
 	float sum = 0.0f;
 	float maxSum = 0.0f;
 
 	for (int i = 0; i < octaves; ++i)
 	{
-		sum += amplitude * abs(get3DSimplexNoiseAtPointOnUnitSphere(point * frequency));
-		maxSum += amplitude;
-		amplitude *= gain;
-		frequency *= lacunarity;
+		sum += a * abs(get3DSimplexNoiseAtPointOnUnitSphere(point * f));
+		maxSum += a;
+		a *= gain;
+		f *= lacunarity;
 	}
 	return sum / maxSum;
 }

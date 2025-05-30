@@ -141,6 +141,8 @@ GLuint posSSBO, colorSSBO, normalSSBO;
 int planetNoiseOctaves = 6;
 float planetNoiseLacunarity = 2.0f;
 float planetNoiseGain = 0.45f;
+float amplitude = 1.0f;
+float frequency = 1.0f;
 int prevPlanetNoiseOctaves = 6;
 float prevPlanetNoiseLacunarity = 2.0f;
 float prevPlanetNoiseGain = 0.45f;
@@ -171,7 +173,7 @@ void generatePlanet()
 	float latitudeAngle;
 	float longitudeAngle;
 	int totalVertices = (latitudes + 1) * (longitudes + 1);
-	
+
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, posSSBO);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, totalVertices * sizeof(vec4), nullptr, GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, posSSBO);
@@ -191,6 +193,8 @@ void generatePlanet()
 	labhelper::setUniformSlow(computeProgram, "noiseOctaves", planetNoiseOctaves);
 	labhelper::setUniformSlow(computeProgram, "noiseLacunarity", planetNoiseLacunarity);
 	labhelper::setUniformSlow(computeProgram, "noiseGain", planetNoiseGain);
+	labhelper::setUniformSlow(computeProgram, "amplitude", amplitude);
+	labhelper::setUniformSlow(computeProgram, "frequency", frequency);
 
 	GLuint groupX = (GLuint)ceil((longitudes + 1) / 16.0f);
 	GLuint groupY = (GLuint)ceil((latitudes + 1) / 16.0f);
@@ -235,7 +239,7 @@ void generatePlanet()
 
 			vec3 normal = computeNormals[index];
 			planetNormals[index] = normal;
-			
+
 			float s = (float)j / longitudes; /* s */
 			float t = (float)i / latitudes;  /* t */
 			planetUVs[index] = vec2(s, t);
@@ -870,6 +874,8 @@ void gui()
 	ImGui::SliderInt("Noise Octaves", &planetNoiseOctaves, 1, 10);
 	ImGui::SliderFloat("Noise Lacunarity", &planetNoiseLacunarity, 0, 8);
 	ImGui::SliderFloat("Noise Gain", &planetNoiseGain, 0, 1);
+	ImGui::SliderFloat("Planet Amplitude", &amplitude, 0.0, 10.0);
+	ImGui::SliderFloat("Planet Frequency", &frequency, 0.0, 10.0);
 	ImGui::SliderFloat("Planet Radius", &planetRadius, 1, 50.0f);
 	ImGui::SliderFloat("Water Radius", &waterRadius, 1, 50.0f);
 	ImGui::SliderFloat("Water Smoothness", &waterSmoothness, 0, 0.999f);
