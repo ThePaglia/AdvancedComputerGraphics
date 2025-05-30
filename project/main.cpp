@@ -141,11 +141,9 @@ GLuint posSSBO, colorSSBO, normalSSBO;
 int planetNoiseOctaves = 6;
 float planetNoiseLacunarity = 2.0f;
 float planetNoiseGain = 0.45f;
-float amplitude = 1.0f;
+float amplitude = 0.6f;
 float frequency = 1.0f;
-int prevPlanetNoiseOctaves = 6;
-float prevPlanetNoiseLacunarity = 2.0f;
-float prevPlanetNoiseGain = 0.45f;
+float offsetMagnitude = 0.5f;
 int radius = 1;
 int latitudes = 600;
 int longitudes = 600;
@@ -195,6 +193,7 @@ void generatePlanet()
 	labhelper::setUniformSlow(computeProgram, "noiseGain", planetNoiseGain);
 	labhelper::setUniformSlow(computeProgram, "amplitude", amplitude);
 	labhelper::setUniformSlow(computeProgram, "frequency", frequency);
+	labhelper::setUniformSlow(computeProgram, "offsetMagnitude", offsetMagnitude);
 
 	GLuint groupX = (GLuint)ceil((longitudes + 1) / 16.0f);
 	GLuint groupY = (GLuint)ceil((latitudes + 1) / 16.0f);
@@ -874,8 +873,9 @@ void gui()
 	ImGui::SliderInt("Noise Octaves", &planetNoiseOctaves, 1, 10);
 	ImGui::SliderFloat("Noise Lacunarity", &planetNoiseLacunarity, 0, 8);
 	ImGui::SliderFloat("Noise Gain", &planetNoiseGain, 0, 1);
-	ImGui::SliderFloat("Planet Amplitude", &amplitude, 0.0, 10.0);
+	ImGui::SliderFloat("Planet Amplitude", &amplitude, 0.0, 1.0);
 	ImGui::SliderFloat("Planet Frequency", &frequency, 0.0, 10.0);
+	ImGui::SliderFloat("Planet Offset", &offsetMagnitude, 0.0, 1.0);
 	ImGui::SliderFloat("Planet Radius", &planetRadius, 1, 50.0f);
 	ImGui::SliderFloat("Water Radius", &waterRadius, 1, 50.0f);
 	ImGui::SliderFloat("Water Smoothness", &waterSmoothness, 0, 0.999f);
@@ -926,16 +926,15 @@ void gui()
 	labhelper::perf::drawEventsWindow();
 }
 
+float prevDiff = 0.0f;
 void regeneratePlanetIfParameterChanged()
 {
-	float diff = prevPlanetNoiseOctaves - planetNoiseOctaves + prevPlanetNoiseLacunarity - planetNoiseLacunarity + prevPlanetNoiseGain - planetNoiseGain;
+	float diff = planetNoiseOctaves + planetNoiseLacunarity + planetNoiseGain + amplitude + frequency + offsetMagnitude;
 
-	prevPlanetNoiseOctaves = planetNoiseOctaves;
-	prevPlanetNoiseLacunarity = planetNoiseLacunarity;
-	prevPlanetNoiseGain = planetNoiseGain;
-
-	if (diff == 0)
+	if (prevDiff == diff)
 		return;
+
+	prevDiff = diff;
 
 	regeneratePlanet();
 }

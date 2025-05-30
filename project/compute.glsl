@@ -25,6 +25,7 @@ uniform float noiseLacunarity = 2.0f;
 uniform float noiseGain = 0.45f;
 uniform float amplitude = 1.0f;
 uniform	float frequency = 1.0f;
+uniform float offsetMagnitude = 1.0f;
 
 int Source[] = {
 	151, 160, 137, 91, 90, 15, 131, 13, 201, 95, 96, 53, 194, 233, 7, 225, 140, 36, 103, 30, 69, 142,
@@ -263,21 +264,32 @@ float get3DSimplexNoiseAtPointOnUnitSphere(vec3 point)
 }
 
 // Helper: Fractal (octave) noise
-float fractalSimplexNoise(vec3 point, int octaves = 5, float lacunarity = 2.0f, float gain = 0.5f)
+float fractalSimplexNoise(vec3 point, int octaves, float lacunarity, float gain)
 {
-	float a = amplitude;
-	float f = frequency;
-	float sum = 0.0f;
-	float maxSum = 0.0f;
+    float a = amplitude;
+    float f = frequency;
+    float sum = 0.0f;
 
-	for (int i = 0; i < octaves; ++i)
-	{
-		sum += a * abs(get3DSimplexNoiseAtPointOnUnitSphere(point * f));
-		maxSum += a;
-		a *= gain;
-		f *= lacunarity;
-	}
-	return sum / maxSum;
+    // Example: hardcoded offsets for up to 8 octaves
+    const vec3 octaveOffsets[8] = vec3[8](
+        vec3(12.9898, 78.233, 45.164),
+        vec3(39.3468, 11.135, 83.155),
+        vec3(73.156, 52.235, 19.345),
+        vec3(41.123, 67.987, 91.234),
+        vec3(23.456, 12.345, 67.890),
+        vec3(56.789, 98.765, 43.210),
+        vec3(87.654, 32.109, 76.543),
+        vec3(65.432, 10.987, 54.321)
+    );
+
+    for (int i = 0; i < octaves; ++i)
+    {
+        vec3 offset = octaveOffsets[i % 8] * offsetMagnitude;
+        sum += a * abs(get3DSimplexNoiseAtPointOnUnitSphere(point * f + offset));
+        a *= gain;
+        f *= lacunarity;
+    }
+    return sum;
 }
 
 float getHeightOnUnitSphere(vec3 point)
