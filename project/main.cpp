@@ -141,9 +141,6 @@ GLuint posSSBO, colorSSBO, normalSSBO;
 int planetNoiseOctaves = 6;
 float planetNoiseLacunarity = 2.0f;
 float planetNoiseGain = 0.45f;
-int prevPlanetNoiseOctaves = 6;
-float prevPlanetNoiseLacunarity = 2.0f;
-float prevPlanetNoiseGain = 0.45f;
 int radius = 1;
 int latitudes = 600;
 int longitudes = 600;
@@ -920,16 +917,15 @@ void gui()
 	labhelper::perf::drawEventsWindow();
 }
 
+float prevDiff = 0.0f;
 void regeneratePlanetIfParameterChanged()
 {
-	float diff = prevPlanetNoiseOctaves - planetNoiseOctaves + prevPlanetNoiseLacunarity - planetNoiseLacunarity + prevPlanetNoiseGain - planetNoiseGain;
+	float diff = planetNoiseOctaves + planetNoiseLacunarity + planetNoiseGain;
 
-	prevPlanetNoiseOctaves = planetNoiseOctaves;
-	prevPlanetNoiseLacunarity = planetNoiseLacunarity;
-	prevPlanetNoiseGain = planetNoiseGain;
-
-	if (diff == 0)
+	if (prevDiff == diff)
 		return;
+	
+	prevDiff = diff;
 
 	regeneratePlanet();
 }
