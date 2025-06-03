@@ -313,6 +313,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     vec3 opaquePoint = vec3(scenePoint);
     float opaqueDepth = sceneDepth; // NOTE: the opaqueDepth retrieved from the scene texture creates quite a lot of precision errors as you move further away from the planet
 
+    // Check if we hit the water sphere
     float tEnterWater, tExitWater;
     bool isInWater = false;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, waterRadius, tEnterWater, tExitWater) && tExitWater > 0) {
@@ -460,6 +461,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         }
     }
 
+    // Calculate cloud shadow above the point
     if(sceneColor != vec3(0)) {
         float cloudDensityAbove = 0;
 
@@ -490,6 +492,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
     if(isInWater) {
         return opaqueRes;
     }
+
 
     // Calculate the atmosphere lighting contribution
     vec4 atmosphereLight = vec4(0.0);
@@ -587,7 +590,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
                 // Use sunColor in the cloud lighting calculation
                 vec3 ambientTerm = ambientColor * ambientIntensity;
                 vec3 lambert = directionalLightIntensityMultiplier * directionalLightColor * sunColor * diffuse;
-                vec3 mieScattering = mieIntensity * miePhase * directionalLightColor * sunColor;
+                vec3 mieScattering = mieIntensity * miePhase * directionalLightColor * sunColor * visibility;
                 vec3 lin = ambientTerm + lambert + mieScattering;
 
                 vec4 color = vec4(mix(vec3(1.0), vec3(0.0), density), density);
