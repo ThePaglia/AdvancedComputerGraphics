@@ -53,7 +53,6 @@ const float atmosphereFalloffDepth = 100.0;
 
 // Planet parameters
 uniform vec3 planetOrigin = vec3(0.0, 0.0, 0.0);
-uniform float planetRadius = 10.0;
 uniform float cloudlessDepth = 0.5;
 uniform float cloudDepth = 1.0;
 uniform float cloudScale = 1.0;
@@ -79,7 +78,7 @@ uniform float reflectionMarchSize = 0.2f;
 uniform float reflectionIntensity = 0.25f;
 
 // Precalculated constants
-const float atmosphereRadius = planetRadius + atmosphereDepth;
+const float atmosphereRadius = waterRadius + atmosphereDepth;
 vec3 sunDirection = normalize(lightPosition);
 
 // MIE Scattering parameters
@@ -127,8 +126,8 @@ float evaluateDensityAt(vec3 p, int numIterations) {
 
     //float cloudBelt = min(-p.y - (-cloudHeight) + cloudDepth / 2, p.y + (-cloudHeight) + cloudDepth / 2) + f;
 
-    float outerCloudShell = sdSphere(p - planetOrigin, planetRadius + cloudlessDepth + cloudDepth);
-    float innerCloudShell = -sdSphere(p - planetOrigin, planetRadius + cloudlessDepth); // cloudDepth = shell thickness
+    float outerCloudShell = sdSphere(p - planetOrigin, waterRadius + cloudlessDepth + cloudDepth);
+    float innerCloudShell = -sdSphere(p - planetOrigin, waterRadius + cloudlessDepth); // cloudDepth = shell thickness
 
     float shell = max(outerCloudShell, innerCloudShell); // Hollow region
     float shellDensity = -shell;
@@ -142,7 +141,7 @@ float evaluateDensityAt(vec3 p, int numIterations) {
 }
 
 float sdf(vec3 p) {
-    float sphere = sdSphere(p - planetOrigin, planetRadius);
+    float sphere = sdSphere(p - planetOrigin, waterRadius);
     return sphere;
 }
 
@@ -228,7 +227,7 @@ bool raymarchSDF(vec3 rayOrigin, vec3 rayDirection, int maxSteps, float maxDepth
 
 // Atmospheric density has an exponential falloff the higher we get from the surface
 float atmosphereDensityAtPoint(vec3 p) {
-    float heightAboveSurface = sdSphere(p - planetOrigin, planetRadius);
+    float heightAboveSurface = sdSphere(p - planetOrigin, waterRadius);
     // normalized height from 1 at the edge of the atmosphere shell to 0 at the surface
     float normalizedHeight = heightAboveSurface / atmosphereDepth;
     // Multiplying by (1 - normalizedHeight) is a bit dirty but ensures that the density is 0 at the edge of the atmosphere shell
@@ -347,12 +346,12 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
             // Accumulate cloud color (volumetricRes) if we hit the cloud shell with the reflected ray
             float tEnterClouds, tExitClouds;
-            if(intersectSphere(waterPoint, reflectDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
+            if(intersectSphere(waterPoint, reflectDirection, planetOrigin, waterRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
                 float startDepth = 0;
 
                 // Check if we hit the space in between the clouds and the planet (the "inner sphere"). If so, we can skip traversing it as there are no clouds there
                 float tEnterInnerSphere, tExitInnerSphere;
-                if(intersectSphere(waterPoint, reflectDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInnerSphere, tExitInnerSphere) && tExitInnerSphere > 0) {
+                if(intersectSphere(waterPoint, reflectDirection, planetOrigin, waterRadius + cloudlessDepth, tEnterInnerSphere, tExitInnerSphere) && tExitInnerSphere > 0) {
                     // If we are inside the space between the clouds and the planet (i.e. if tEnterInnerSphere < 0, i.e. we enter the sphere behind us), jump forward to just before we enter the clouds
                     startDepth = tEnterInnerSphere <= 0 ? max(tExitInnerSphere, 0.0) - MARCH_SIZE : startDepth;
                 }
@@ -468,11 +467,11 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
         // Calculate cloud density above (i.e. in the sun's direction) this point
         int numShadowSteps = 8;
         float tEnterOuter, tExitOuter;
-        if(intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterOuter, tExitOuter) && tExitOuter > 0) {
+        if(intersectSphere(opaquePoint, sunDirection, planetOrigin, waterRadius + cloudlessDepth + cloudDepth, tEnterOuter, tExitOuter) && tExitOuter > 0) {
             // This method works well as long as the ray starts inside of the cloud shell (i.e. within cloudlessDepth) but breaks if the ray starts outside of the inner shell
             // It breaks because we don't skip forward through the empty space, as we do in the volumetric calculations below
             float tEnterInner, tExitInner;
-            intersectSphere(opaquePoint, sunDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInner, tExitInner);
+            intersectSphere(opaquePoint, sunDirection, planetOrigin, waterRadius + cloudlessDepth, tEnterInner, tExitInner);
             float rayLength = tExitOuter - max(tExitInner, 0);
             float stepSize = rayLength / (numShadowSteps - 1);
             for(int i = 0; i < numShadowSteps; i++) {
@@ -496,7 +495,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
     // Calculate the atmosphere lighting contribution
     vec4 atmosphereLight = vec4(0.0);
-    float atmosphereRadius = planetRadius + atmosphereDepth;
+    float atmosphereRadius = waterRadius + atmosphereDepth;
     float tEnterAtmosphere, tExitAtmosphere;
     if(intersectSphere(rayOrigin, rayDirection, planetOrigin, atmosphereRadius, tEnterAtmosphere, tExitAtmosphere) && tExitAtmosphere > 0) {
         vec3 p = rayOrigin + rayDirection * max(tEnterAtmosphere, 0);
@@ -510,7 +509,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
     // Accumulate cloud color (volumetricRes) if we hit the cloud shell
     float tEnterClouds, tExitClouds;
-    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
+    if(intersectSphere(rayOrigin, rayDirection, planetOrigin, waterRadius + cloudlessDepth + cloudDepth, tEnterClouds, tExitClouds) && tExitClouds > 0) {
         float startDepth = max(tEnterClouds, 0.0);
 
         // We need to keep track of whether or not we have skipped the inner cloud shell, i.e. entered a cloud region and then exited it and jumped forward to the next cloud region on the other side of the cloud shell
@@ -518,7 +517,7 @@ vec4 raymarch(vec3 rayOrigin, vec3 rayDirection, vec3 cameraForward, float offse
 
         // Check if we hit the space in between the clouds and the planet (the "inner sphere"). If so, we can skip traversing it as there are no clouds there
         float tEnterInnerSphere, tExitInnerSphere;
-        if(intersectSphere(rayOrigin, rayDirection, planetOrigin, planetRadius + cloudlessDepth, tEnterInnerSphere, tExitInnerSphere) && tExitInnerSphere > 0) {
+        if(intersectSphere(rayOrigin, rayDirection, planetOrigin, waterRadius + cloudlessDepth, tEnterInnerSphere, tExitInnerSphere) && tExitInnerSphere > 0) {
             // If we are inside the space between the clouds and the planet (i.e. if tEnterInnerSphere < 0, i.e. we enter the sphere behind us), jump forward to just before we enter the clouds
             startDepth = tEnterInnerSphere <= 0 ? max(tExitInnerSphere, 0.0) - MARCH_SIZE : startDepth;
             // If we are inside the space between the clouds and the planet, set hasSkippedInnerCloudShell to true, this ensures that we won't jump forward later again (as we have already done it on the last row)

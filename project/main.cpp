@@ -72,7 +72,7 @@ float directionalLightIntensityMultiplier = 1.0f;
 // Cloud parameters
 float cloudMovementSpeed = 0.05f;
 float cloudTime = 0.0f;
-float planetRadius = 15.0f;
+float planetScale = 15.0f;
 float cloudlessDepth = 2.2f;
 float cloudDepth = 1.0f;
 float cloudScale = 0.4f;
@@ -92,10 +92,10 @@ bool beerPowderLaw = false;
 
 // Atmosphere parameters
 float atmosphereDepth = 10.0f;
-float atmosphereDensityFalloff = 3.0f;
+float atmosphereDensityFalloff = 2.2f;
 vec3 colorBandWavelengths = vec3(700, 530, 440);
 float atmosphereScatteringStrength = 3.0f;
-float atmosphereDensityAtSeaLevel = 0.13f;
+float atmosphereDensityAtSeaLevel = 0.18f;
 float pointLightIntensityMultiplier = 0.8f;
 
 // Water parameters
@@ -514,7 +514,6 @@ void drawFullscreenQuad(GLuint currentShaderProgram, mat4 viewMatrix, mat4 light
 	// Simulation parameters
 	labhelper::setUniformSlow(currentShaderProgram, "uTime", currentTime);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudTime", cloudTime);
-	labhelper::setUniformSlow(currentShaderProgram, "planetRadius", planetRadius);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudlessDepth", cloudlessDepth);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudDepth", cloudDepth);
 	labhelper::setUniformSlow(currentShaderProgram, "cloudScale", cloudScale);
@@ -666,7 +665,7 @@ void display(void)
 
 	mat4 lightViewMatrix = lookAt(lightPosition, vec3(0.0f), worldUp);
 	// We scale the orthographic "frustum" to the planet's radius so that we get the most out of the shadow map
-	float orthoWidth = planetRadius * furthestVertex;
+	float orthoWidth = planetScale * furthestVertex;
 	mat4 lightProjMatrix = ortho(-orthoWidth, orthoWidth, -orthoWidth, orthoWidth, 10.0f, 100.0f);
 
 	///////////////////////////////////////////////////////////////////////////
@@ -737,7 +736,7 @@ void display(void)
 		glViewport(0, 0, rasterizedFBO.width, rasterizedFBO.height);
 		glClearColor(0, 0, 0, 0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		planetModelMatrix = scale(vec3(planetRadius));
+		planetModelMatrix = scale(vec3(planetScale));
 		drawScene(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
 	}
 
@@ -876,7 +875,7 @@ void gui()
 	ImGui::SliderFloat("Planet Amplitude", &amplitude, 0.0, 1.0);
 	ImGui::SliderFloat("Planet Frequency", &frequency, 0.0, 10.0);
 	ImGui::SliderFloat("Planet Offset", &offsetMagnitude, 0.0, 1.0);
-	ImGui::SliderFloat("Planet Radius", &planetRadius, 1, 50.0f);
+	ImGui::SliderFloat("Planet Scale", &planetScale, 1, 50.0f);
 	ImGui::SliderFloat("Water Radius", &waterRadius, 1, 50.0f);
 	ImGui::SliderFloat("Water Smoothness", &waterSmoothness, 0, 0.999f);
 	ImGui::SliderFloat("Water Noise Scale", &waterNoiseScale, 0, 100);
