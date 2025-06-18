@@ -375,6 +375,13 @@ void main() {
 
     vec3 normal = normalize(cross(dLat, dLon));
 
+	if (i == 0) {
+		normal = vec3(0.0, 0.0, 1.0);  // North pole normal
+	} else if (i == uint(latitudes)) {
+		normal = vec3(0.0, 0.0, -1.0); // South pole normal
+	}
+
+
     uint index = i * (longitudes + 1u) + j;
     positions[index] = vec4(pos, h);
     colors[index] = vec4(getColorForHeight(h), 1.0);
