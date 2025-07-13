@@ -44,6 +44,8 @@ GLuint simpleProgram;		// Shader used for testing
 GLuint computeProgram;		// Shader used for computing the terrain heights
 
 // Camera parameters.
+float yaw = -90.0f;		// Camera yaw angle
+float pitch = 0.0f;		// Camera pitch angle
 vec3 worldUp(0.0f, 1.0f, 0.0f);
 vec3 cameraPosition(0.0f, 0.0f, -50);
 vec3 cameraDirection = normalize(vec3(0.0f) + cameraPosition);
@@ -801,22 +803,28 @@ bool handleEvents(void)
 
 		if (event.type == SDL_MOUSEMOTION && g_doMouseLookaround)
 		{
-			// More info at https://wiki.libsdl.org/SDL_MouseMotionEvent
-			int delta_x = event.motion.xrel;
-			int delta_y = event.motion.yrel;
-			float rotationSpeed = -0.1f;
-			// Calculate yaw, i.e. rotation around y axis
-			mat4 yaw = rotate(rotationSpeed * deltaTime * -delta_x, worldUp);
-			// Apply yaw to direction
-			cameraDirection = vec3(yaw * vec4(cameraDirection, 0.0f));
-			// Calculate right vector from new direction
-			cameraRight = normalize(cross(cameraDirection, worldUp));
-			// Calculate pitch around new cameraRight
-			mat4 pitch = rotate(rotationSpeed * deltaTime * -delta_y, cameraRight);
-			// Apply pitch to direction
-			cameraDirection = vec3(pitch * vec4(cameraDirection, 0.0f));
-			// Calculate cameraUp from new direction and cameraRight
-			cameraUp = cross(cameraRight, cameraDirection);
+			float sensitivity = 0.1f;
+			float delta_x = static_cast<float>(event.motion.xrel) * sensitivity;
+			float delta_y = static_cast<float>(event.motion.yrel) * sensitivity;
+
+			yaw -= delta_x;
+			pitch += delta_y;
+
+			// Clamp pitch to avoid gimbal lock
+			if (pitch > 89.0f) pitch = 89.0f;
+			if (pitch < -89.0f) pitch = -89.0f;
+
+			// Calculate new direction
+			float yawRad = glm::radians(yaw);
+			float pitchRad = glm::radians(pitch);
+			cameraDirection = glm::normalize(glm::vec3(
+				cos(pitchRad) * cos(yawRad),
+				sin(pitchRad),
+				cos(pitchRad) * sin(yawRad)
+			));
+
+			cameraRight = glm::normalize(glm::cross(cameraDirection, worldUp));
+			cameraUp = glm::normalize(glm::cross(cameraRight, cameraDirection));
 		}
 	}
 
